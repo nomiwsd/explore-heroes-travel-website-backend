@@ -10,7 +10,6 @@ storage/app/*
 !storage/app/public/
 storage/app/public/*
 !storage/app/public/demo/
-/vendor
 /.idea/*
 !.idea/codeStyles/*
 /resources/ckeditor/node_modules/
@@ -27,9 +26,11 @@ yarn-error.log
 /.vscode
 storage/bc.php
 storage/pro.php
-storage/installed
 public/themes/*/dist
 /storage/logs
-/storage/framework
-/storage/debugbar
 /public/uploads
+/vendor/
+/storage/framework/
+/storage/debugbar/
+/database/backups/
+/bootstrap/cache/*.php
