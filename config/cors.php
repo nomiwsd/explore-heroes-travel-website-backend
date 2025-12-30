@@ -24,6 +24,7 @@
         'http://127.0.0.1:3000',
         'http://localhost:8000',
         'http://127.0.0.1:8000',
+        'https://explore-heros-travel-website.vercel.app',
     ],
 
     'allowed_origins_patterns' => [],
