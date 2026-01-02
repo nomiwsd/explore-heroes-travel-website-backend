@@ -17,7 +17,7 @@ Route::group(['prefix'=>'admin/module/language','middleware' => ['auth:sanctum',
     Route::post('/translations/scan', [\Modules\Language\Admin\TranslationsController::class, 'scanForStringsApi']);
 });
 
-// User Management API Routes  
+// User Management API Routes
 Route::group(['prefix'=>'admin/module/user','middleware' => ['auth:sanctum','dashboard']], function() {
     // Users API
     Route::get('/api/users', [\Modules\User\Admin\UserManagementController::class, 'index']);
@@ -25,7 +25,7 @@ Route::group(['prefix'=>'admin/module/user','middleware' => ['auth:sanctum','das
     Route::post('/api/users/store', [\Modules\User\Admin\UserManagementController::class, 'store']);
     Route::post('/api/users/store/{id}', [\Modules\User\Admin\UserManagementController::class, 'update']);
     Route::post('/api/users/bulkEdit', [\Modules\User\Admin\UserManagementController::class, 'bulkEdit']);
-    
+
     // Roles API
     Route::get('/api/roles', [\Modules\User\Admin\RoleManagementController::class, 'index']);
     Route::get('/api/roles/{id}', [\Modules\User\Admin\RoleManagementController::class, 'edit']);
@@ -72,7 +72,7 @@ Route::group(['prefix'=>'admin','middleware' => ['auth:sanctum','dashboard']], f
             $reflection = new \ReflectionMethod($class.$controller.'Controller', $action);
             $parameters = $reflection->getParameters();
             $params = array_values(array_filter([$param1,$param2,$param3], function($v) { return $v !== ''; }));
-            
+
             // Map parameters by name
             $namedParams = [];
             $paramIndex = 0;
@@ -87,7 +87,7 @@ Route::group(['prefix'=>'admin','middleware' => ['auth:sanctum','dashboard']], f
                     $paramIndex++;
                 }
             }
-            
+
             return App::call($class.$controller.'Controller@'.$action, $namedParams);
         }
         abort(404);
