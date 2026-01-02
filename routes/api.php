@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\TestController;
+use App\Http\Controllers\Api\DashboardController;
 use Illuminate\Support\Facades\Auth;
 
 /*
@@ -66,6 +67,15 @@ Route::prefix('admin')->group(function () {
     Route::get('/me', function (Request $request) {
         return response()->json($request->user());
     })->middleware('auth:sanctum');
+
+    // Dashboard Routes (protected)
+    Route::middleware('auth:sanctum')->prefix('dashboard')->group(function () {
+        Route::get('/stats', [DashboardController::class, 'getStats']);
+        Route::get('/submissions', [DashboardController::class, 'getLatestSubmissions']);
+        Route::get('/activity', [DashboardController::class, 'getActivityLog']);
+        Route::get('/website-status', [DashboardController::class, 'getWebsiteStatus']);
+        Route::post('/submissions/{id}/status', [DashboardController::class, 'updateSubmissionStatus']);
+    });
 });
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {

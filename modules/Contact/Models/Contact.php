@@ -6,6 +6,7 @@ use App\BaseModel;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Modules\Tour\Models\Tour;
 
 class Contact extends BaseModel
 {
@@ -16,8 +17,22 @@ class Contact extends BaseModel
         'email',
         'message',
         'phone',
-        'status'
+        'status',
+        'form_type',
+        'tour_id',
+        'subject',
+        'travel_date',
+        'number_of_people',
+        'special_requirements'
     ];
+
+    /**
+     * Get the tour associated with this contact (for quote requests)
+     */
+    public function tour()
+    {
+        return $this->belongsTo(Tour::class, 'tour_id');
+    }
 
 //    protected $cleanFields = ['message'];
 }
