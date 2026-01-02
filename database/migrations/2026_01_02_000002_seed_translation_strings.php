@@ -26,7 +26,7 @@ return new class extends Migration
             'Contact' => ['ar' => 'اتصل بنا', 'es' => 'Contacto', 'fr' => 'Contact'],
             'Blog' => ['ar' => 'المدونة', 'es' => 'Blog', 'fr' => 'Blog'],
             'Destinations' => ['ar' => 'الوجهات', 'es' => 'Destinos', 'fr' => 'Destinations'],
-            
+
             // Common UI
             'Search' => ['ar' => 'بحث', 'es' => 'Buscar', 'fr' => 'Rechercher'],
             'Book Now' => ['ar' => 'احجز الآن', 'es' => 'Reservar ahora', 'fr' => 'Réserver maintenant'],
@@ -39,7 +39,7 @@ return new class extends Migration
             'Edit' => ['ar' => 'تعديل', 'es' => 'Editar', 'fr' => 'Modifier'],
             'Close' => ['ar' => 'إغلاق', 'es' => 'Cerrar', 'fr' => 'Fermer'],
             'Loading...' => ['ar' => 'جاري التحميل...', 'es' => 'Cargando...', 'fr' => 'Chargement...'],
-            
+
             // Authentication
             'Login' => ['ar' => 'تسجيل الدخول', 'es' => 'Iniciar sesión', 'fr' => 'Connexion'],
             'Logout' => ['ar' => 'تسجيل الخروج', 'es' => 'Cerrar sesión', 'fr' => 'Déconnexion'],
@@ -48,7 +48,7 @@ return new class extends Migration
             'Password' => ['ar' => 'كلمة المرور', 'es' => 'Contraseña', 'fr' => 'Mot de passe'],
             'Forgot Password?' => ['ar' => 'نسيت كلمة المرور؟', 'es' => '¿Olvidaste tu contraseña?', 'fr' => 'Mot de passe oublié?'],
             'Remember me' => ['ar' => 'تذكرني', 'es' => 'Recuérdame', 'fr' => 'Se souvenir de moi'],
-            
+
             // Booking
             'Check In' => ['ar' => 'تسجيل الوصول', 'es' => 'Entrada', 'fr' => 'Arrivée'],
             'Check Out' => ['ar' => 'تسجيل المغادرة', 'es' => 'Salida', 'fr' => 'Départ'],
@@ -60,7 +60,7 @@ return new class extends Migration
             'Total' => ['ar' => 'المجموع', 'es' => 'Total', 'fr' => 'Total'],
             'Per Night' => ['ar' => 'لليلة', 'es' => 'Por noche', 'fr' => 'Par nuit'],
             'Per Person' => ['ar' => 'للشخص', 'es' => 'Por persona', 'fr' => 'Par personne'],
-            
+
             // Tour specific
             'Duration' => ['ar' => 'المدة', 'es' => 'Duración', 'fr' => 'Durée'],
             'Group Size' => ['ar' => 'حجم المجموعة', 'es' => 'Tamaño del grupo', 'fr' => 'Taille du groupe'],
@@ -68,12 +68,12 @@ return new class extends Migration
             'Itinerary' => ['ar' => 'برنامج الرحلة', 'es' => 'Itinerario', 'fr' => 'Itinéraire'],
             'Included' => ['ar' => 'مشمول', 'es' => 'Incluido', 'fr' => 'Inclus'],
             'Not Included' => ['ar' => 'غير مشمول', 'es' => 'No incluido', 'fr' => 'Non inclus'],
-            
+
             // Reviews
             'Reviews' => ['ar' => 'التقييمات', 'es' => 'Reseñas', 'fr' => 'Avis'],
             'Rating' => ['ar' => 'التقييم', 'es' => 'Calificación', 'fr' => 'Note'],
             'Write a Review' => ['ar' => 'اكتب تقييم', 'es' => 'Escribir una reseña', 'fr' => 'Écrire un avis'],
-            
+
             // Footer
             'About Us' => ['ar' => 'من نحن', 'es' => 'Sobre nosotros', 'fr' => 'À propos de nous'],
             'Privacy Policy' => ['ar' => 'سياسة الخصوصية', 'es' => 'Política de privacidad', 'fr' => 'Politique de confidentialité'],
@@ -81,7 +81,7 @@ return new class extends Migration
             'FAQ' => ['ar' => 'الأسئلة الشائعة', 'es' => 'Preguntas frecuentes', 'fr' => 'FAQ'],
             'Support' => ['ar' => 'الدعم', 'es' => 'Soporte', 'fr' => 'Support'],
             'All Rights Reserved' => ['ar' => 'جميع الحقوق محفوظة', 'es' => 'Todos los derechos reservados', 'fr' => 'Tous droits réservés'],
-            
+
             // Messages
             'Welcome' => ['ar' => 'مرحبا', 'es' => 'Bienvenido', 'fr' => 'Bienvenue'],
             'Thank you' => ['ar' => 'شكرا لك', 'es' => 'Gracias', 'fr' => 'Merci'],
@@ -89,13 +89,13 @@ return new class extends Migration
             'Error' => ['ar' => 'خطأ', 'es' => 'Error', 'fr' => 'Erreur'],
             'Warning' => ['ar' => 'تحذير', 'es' => 'Advertencia', 'fr' => 'Avertissement'],
             'No results found' => ['ar' => 'لم يتم العثور على نتائج', 'es' => 'No se encontraron resultados', 'fr' => 'Aucun résultat trouvé'],
-            
+
             // Hero Section
             'Explore the World' => ['ar' => 'استكشف العالم', 'es' => 'Explora el mundo', 'fr' => 'Explorez le monde'],
             'Discover Amazing Places' => ['ar' => 'اكتشف أماكن مذهلة', 'es' => 'Descubre lugares increíbles', 'fr' => 'Découvrez des endroits incroyables'],
             'Find your next adventure' => ['ar' => 'اعثر على مغامرتك القادمة', 'es' => 'Encuentra tu próxima aventura', 'fr' => 'Trouvez votre prochaine aventure'],
             'Start your journey' => ['ar' => 'ابدأ رحلتك', 'es' => 'Comienza tu viaje', 'fr' => 'Commencez votre voyage'],
-            
+
             // Popular sections
             'Popular Tours' => ['ar' => 'الجولات الشائعة', 'es' => 'Tours populares', 'fr' => 'Circuits populaires'],
             'Featured Destinations' => ['ar' => 'الوجهات المميزة', 'es' => 'Destinos destacados', 'fr' => 'Destinations en vedette'],
@@ -103,7 +103,7 @@ return new class extends Migration
             'Why Choose Us' => ['ar' => 'لماذا تختارنا', 'es' => '¿Por qué elegirnos?', 'fr' => 'Pourquoi nous choisir'],
             'Our Services' => ['ar' => 'خدماتنا', 'es' => 'Nuestros servicios', 'fr' => 'Nos services'],
             'Testimonials' => ['ar' => 'شهادات العملاء', 'es' => 'Testimonios', 'fr' => 'Témoignages'],
-            
+
             // Contact
             'Contact Us' => ['ar' => 'اتصل بنا', 'es' => 'Contáctenos', 'fr' => 'Contactez-nous'],
             'Send Message' => ['ar' => 'إرسال رسالة', 'es' => 'Enviar mensaje', 'fr' => 'Envoyer un message'],

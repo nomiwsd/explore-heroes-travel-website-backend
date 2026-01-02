@@ -63,7 +63,7 @@ class BuildTranslations extends Command
 
             // Write to resources/lang
             file_put_contents($file, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-            
+
             // Write to public/locales
             file_put_contents($publicFile, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
