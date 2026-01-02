@@ -37,6 +37,7 @@
         "rap2hpoutre/laravel-log-viewer": "^2.2.0",
         "simplesoftwareio/simple-qrcode": "^4.2.0",
         "spatie/laravel-google-cloud-storage": "^2.0.3",
+        "spatie/laravel-permission": "^6.0",
         "stripe/stripe-php": "^7.113",
         "symfony/http-client": "^6.3",
         "symfony/mailgun-mailer": "^6.0",
