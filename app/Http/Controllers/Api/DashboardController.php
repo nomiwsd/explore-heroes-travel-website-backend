@@ -31,16 +31,16 @@ class DashboardController extends Controller
             $totalInquiries = Schema::hasTable('bc_contact') ? Contact::count() : 0;
             $newInquiriesLast24h = Schema::hasTable('bc_contact') ? Contact::where('created_at', '>=', $last24Hours)->count() : 0;
             $newInquiriesLast7Days = Schema::hasTable('bc_contact') ? Contact::where('created_at', '>=', $last7Days)->count() : 0;
-            
+
             // Unread submissions (status = 'new' or null)
             $unreadSubmissions = Schema::hasTable('bc_contact') ? Contact::where(function($query) {
                 $query->where('status', 'new')
                       ->orWhereNull('status');
             })->count() : 0;
-            
+
             // Quote requests (form_type = 'quote')
             $quoteRequests = Schema::hasTable('bc_contact') ? Contact::where('form_type', 'quote')->count() : 0;
-            
+
             // Replied submissions
             $repliedSubmissions = Schema::hasTable('bc_contact') ? Contact::where('status', 'replied')->count() : 0;
             // Tours Statistics
@@ -59,7 +59,7 @@ class DashboardController extends Controller
             // Missing SEO - pages and tours without meta_title or meta_desc
             $missingSeoTours = 0;
             $missingSeoPages = 0;
-            
+
             if (Schema::hasTable('bc_seo')) {
                 if (Schema::hasTable('bc_tours')) {
                     $missingSeoTours = DB::table('bc_tours')
