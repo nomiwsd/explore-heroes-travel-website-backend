@@ -13,6 +13,11 @@ class VerifyCsrfToken extends Middleware
      */
 	protected $except = [
 		//
-		'*/gateway_callback/*'
+		'*/gateway_callback/*',
+        'api/*',
+        'admin/module/language/translations/*',
+        'admin/module/language/*',
+        'admin/module/*',
+        'admin/api/*',
 	];
 }
