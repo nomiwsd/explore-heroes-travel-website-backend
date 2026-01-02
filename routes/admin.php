@@ -2,6 +2,44 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\App;
 
+// ============================================================
+// SPECIFIC API ROUTES - Must be before the catch-all route!
+// ============================================================
+
+// Language Translation API Routes
+Route::group(['prefix'=>'admin/module/language','middleware' => ['auth:sanctum','dashboard']], function() {
+    // Translations API
+    Route::get('/translations/{locale}', [\Modules\Language\Admin\TranslationsController::class, 'getTranslationsApi']);
+    Route::post('/translations/{locale}/save', [\Modules\Language\Admin\TranslationsController::class, 'saveTranslationsApi']);
+    Route::post('/translations/{locale}/build', [\Modules\Language\Admin\TranslationsController::class, 'buildTranslationsApi']);
+    Route::get('/translations/{locale}/stats', [\Modules\Language\Admin\TranslationsController::class, 'getStatsApi']);
+    Route::get('/translations/{locale}/export', [\Modules\Language\Admin\TranslationsController::class, 'exportTranslations']);
+    Route::post('/translations/scan', [\Modules\Language\Admin\TranslationsController::class, 'scanForStringsApi']);
+});
+
+// User Management API Routes  
+Route::group(['prefix'=>'admin/module/user','middleware' => ['auth:sanctum','dashboard']], function() {
+    // Users API
+    Route::get('/api/users', [\Modules\User\Admin\UserManagementController::class, 'index']);
+    Route::get('/api/users/{id}', [\Modules\User\Admin\UserManagementController::class, 'edit']);
+    Route::post('/api/users/store', [\Modules\User\Admin\UserManagementController::class, 'store']);
+    Route::post('/api/users/store/{id}', [\Modules\User\Admin\UserManagementController::class, 'update']);
+    Route::post('/api/users/bulkEdit', [\Modules\User\Admin\UserManagementController::class, 'bulkEdit']);
+    
+    // Roles API
+    Route::get('/api/roles', [\Modules\User\Admin\RoleManagementController::class, 'index']);
+    Route::get('/api/roles/{id}', [\Modules\User\Admin\RoleManagementController::class, 'edit']);
+    Route::post('/api/roles/store', [\Modules\User\Admin\RoleManagementController::class, 'store']);
+    Route::post('/api/roles/store/{id}', [\Modules\User\Admin\RoleManagementController::class, 'update']);
+    Route::post('/api/roles/bulkEdit', [\Modules\User\Admin\RoleManagementController::class, 'bulkEdit']);
+    Route::get('/api/permissions', [\Modules\User\Admin\RoleManagementController::class, 'getPermissions']);
+    Route::post('/api/roles/{id}/permissions', [\Modules\User\Admin\RoleManagementController::class, 'assignPermissions']);
+});
+
+// ============================================================
+// DYNAMIC MODULE ROUTING - Catch-all (must be AFTER specific routes)
+// ============================================================
+
 // Admin Route - Dynamic module routing
 Route::group(['prefix'=>'admin','middleware' => ['auth:sanctum','dashboard']], function() {
     // Dashboard route
