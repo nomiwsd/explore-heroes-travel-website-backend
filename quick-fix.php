@@ -7,6 +7,12 @@ echo "=================================================\n";
 echo "QUICK FIX SCRIPT\n";
 echo "=================================================\n\n";
 
+// Initialize Laravel first
+require __DIR__.'/vendor/autoload.php';
+$app = require_once __DIR__.'/bootstrap/app.php';
+$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$kernel->bootstrap();
+
 $steps = [
     [
         'name' => 'Check if Spatie Permission package is installed',
@@ -51,7 +57,7 @@ $fixes = [];
 foreach ($steps as $i => $step) {
     $num = $i + 1;
     echo "$num. " . $step['name'] . "...\n";
-    
+
     try {
         if ($step['check']()) {
             echo "   ✅ OK\n";
@@ -81,7 +87,7 @@ if (empty($failed)) {
     foreach ($failed as $i => $issue) {
         echo ($i + 1) . ". $issue\n";
     }
-    
+
     echo "\n=================================================\n";
     echo "FIXES\n";
     echo "=================================================\n\n";
@@ -96,12 +102,12 @@ echo "\n=================================================\n";
 // If everything is OK, try to load autoloader and test
 if (empty($failed)) {
     echo "\nRunning quick API test...\n\n";
-    
+
     require __DIR__.'/vendor/autoload.php';
     $app = require_once __DIR__.'/bootstrap/app.php';
     $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
     $kernel->bootstrap();
-    
+
     // Test permissions API
     try {
         $permissions = \Spatie\Permission\Models\Permission::count();
@@ -109,10 +115,10 @@ if (empty($failed)) {
     } catch (\Exception $e) {
         echo "❌ Permissions API error: " . $e->getMessage() . "\n";
     }
-    
+
     // Test translations
     try {
-        $translations = DB::table('core_translations')
+        $translations = \Illuminate\Support\Facades\DB::table('core_translations')
             ->where('locale', 'raw')
             ->count();
         echo "✅ Translations works - found $translations strings\n";
