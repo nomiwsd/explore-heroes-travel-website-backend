@@ -16,3 +16,13 @@ Route::group(['prefix'=>'translation'],function (){
     Route::get('findTranslations','TranslationsController@findTranslations')->name('language.admin.translations.findTranslations');
 });
 
+// API Routes for translations (JSON responses)
+Route::group(['prefix' => 'translations'], function () {
+    Route::get('/{locale}', 'TranslationsController@getTranslationsApi')->name('language.admin.translations.api.list');
+    Route::post('/{locale}/save', 'TranslationsController@saveTranslationsApi')->name('language.admin.translations.api.save');
+    Route::post('/{locale}/build', 'TranslationsController@buildTranslationsApi')->name('language.admin.translations.api.build');
+    Route::get('/{locale}/stats', 'TranslationsController@getStatsApi')->name('language.admin.translations.api.stats');
+    Route::get('/{locale}/export', 'TranslationsController@exportTranslations')->name('language.admin.translations.api.export');
+    Route::post('/scan', 'TranslationsController@scanForStringsApi')->name('language.admin.translations.api.scan');
+});
+

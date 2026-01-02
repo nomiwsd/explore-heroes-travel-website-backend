@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\TestController;
 use App\Http\Controllers\Api\DashboardController;
 use Illuminate\Support\Facades\Auth;
+use Modules\Core\Models\Settings;
 
 /*
 |--------------------------------------------------------------------------
@@ -16,6 +17,14 @@ use Illuminate\Support\Facades\Auth;
 | is assigned the "api" middleware group. Enjoy building your API!
 |
 */
+
+// Public Settings API (no auth required)
+Route::prefix('settings')->group(function () {
+    Route::get('/{group?}', function ($group = 'general') {
+        $settings = Settings::getSettings($group);
+        return response()->json($settings);
+    });
+});
 
 // Test Routes - For Database Testing
 Route::prefix('test')->group(function () {

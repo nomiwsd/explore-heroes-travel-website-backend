@@ -319,4 +319,277 @@ class TranslationsController extends AdminController
         }
         return redirect($back)->with('success', __("Load language from json success"));
     }
+
+    /**
+     * API: Get translations for a locale
+     */
+    public function getTranslationsApi(Request $request, $locale)
+    {
+        $lang = Language::where('locale', $locale)->first();
+        if (empty($lang)) {
+            return response()->json(['error' => 'Language not found'], 404);
+        }
+
+        $query = Translation::select([
+            'core_translations.id',
+            'core_translations.string as key',
+            'core_translations.string as original',
+            't.string as translation'
+        ]);
+
+        $query->where('core_translations.locale', 'raw');
+
+        $query->leftJoin('core_translations as t', function ($join) use ($lang) {
+            $join->on('t.parent_id', '=', 'core_translations.id');
+            $join->where('t.locale', '=', $lang->locale);
+        });
+
+        // Filter by type
+        if ($request->filter) {
+            switch ($request->filter) {
+                case "not_translated":
+                    $query->whereRaw("(t.id is null or IFNULL(t.string,'') = '' )");
+                    break;
+                case "translated":
+                    $query->whereRaw("IFNULL(t.string,'') != '' ");
+                    break;
+            }
+        }
+
+        // Search
+        if ($request->s) {
+            $query->where(function($q) use ($request) {
+                $q->where('core_translations.string', 'like', '%' . $request->s . '%')
+                  ->orWhere('t.string', 'like', '%' . $request->s . '%');
+            });
+        }
+
+        // Group filter
+        if ($request->group) {
+            $query->where('core_translations.group', $request->group);
+        }
+
+        $perPage = $request->per_page ?? 20;
+        $results = $query->orderBy('core_translations.string', 'asc')->paginate($perPage);
+
+        // Calculate stats
+        $totalQuery = Translation::where('locale', 'raw')->count();
+        $translatedQuery = Translation::where('locale', $lang->locale)
+            ->whereRaw("IFNULL(string,'') != ''")
+            ->count();
+
+        return response()->json([
+            'data' => $results->items(),
+            'stats' => [
+                'total' => $totalQuery,
+                'translated' => $translatedQuery,
+                'not_translated' => $totalQuery - $translatedQuery,
+                'progress' => $totalQuery > 0 ? round(($translatedQuery / $totalQuery) * 100) : 0
+            ],
+            'meta' => [
+                'current_page' => $results->currentPage(),
+                'last_page' => $results->lastPage(),
+                'per_page' => $results->perPage(),
+                'total' => $results->total()
+            ]
+        ]);
+    }
+
+    /**
+     * API: Save translations
+     */
+    public function saveTranslationsApi(Request $request, $locale)
+    {
+        $lang = Language::where('locale', $locale)->first();
+        if (empty($lang)) {
+            return response()->json(['error' => 'Language not found'], 404);
+        }
+
+        $translations = $request->input('translations', []);
+        $saved = 0;
+
+        foreach ($translations as $item) {
+            $key = $item['key'] ?? null;
+            $value = $item['value'] ?? '';
+
+            if (!$key) continue;
+
+            // Find the raw translation
+            $rawTranslation = Translation::where('locale', 'raw')
+                ->where('string', $key)
+                ->first();
+
+            if (!$rawTranslation) continue;
+
+            // Find or create the translated version
+            $check = Translation::where('locale', $lang->locale)
+                ->where('parent_id', $rawTranslation->id)
+                ->first();
+
+            if ($check) {
+                $check->string = $value;
+                $check->save();
+            } else {
+                $check = new Translation();
+                $check->parent_id = $rawTranslation->id;
+                $check->string = $value;
+                $check->locale = $lang->locale;
+                $check->save();
+            }
+            $saved++;
+        }
+
+        return response()->json([
+            'success' => true,
+            'saved' => $saved,
+            'message' => "Saved {$saved} translations"
+        ]);
+    }
+
+    /**
+     * API: Build translations (generate JSON file)
+     */
+    public function buildTranslationsApi(Request $request, $locale)
+    {
+        $lang = Language::where('locale', $locale)->first();
+        if (empty($lang)) {
+            return response()->json(['error' => 'Language not found'], 404);
+        }
+
+        // Build the JSON file in resources/lang
+        $file = base_path('resources/lang/' . $lang->locale . '.json');
+
+        if (!is_writable(base_path('resources/lang'))) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Folder resources/lang is not writable'
+            ], 500);
+        }
+
+        $query = Translation::select([
+            'core_translations.*',
+            't.string as origin'
+        ])->where('core_translations.locale', $lang->locale)
+          ->whereRaw("IFNULL(core_translations.string,'') != '' ");
+
+        $query->join('core_translations as t', function ($join) use ($lang) {
+            $join->on('t.id', '=', 'core_translations.parent_id');
+            $join->where('t.locale', 'raw');
+        });
+
+        $json = [];
+        $rows = $query->get();
+        if (!empty($rows)) {
+            foreach ($rows as $row) {
+                $json[$row['origin']] = $row['string'];
+            }
+        }
+
+        // Write to resources/lang folder (backend)
+        $myfile = fopen($file, "w");
+        fwrite($myfile, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        fclose($myfile);
+
+        // Also write to public folder for frontend access
+        $publicDir = base_path('public/locales');
+        if (!is_dir($publicDir)) {
+            mkdir($publicDir, 0755, true);
+        }
+        $publicFile = $publicDir . '/' . $lang->locale . '.json';
+        $publicFileHandle = fopen($publicFile, "w");
+        fwrite($publicFileHandle, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        fclose($publicFileHandle);
+
+        // Update last build time
+        $lang->last_build_at = date('Y-m-d H:i:s');
+        $lang->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Translation file built successfully for {$lang->name}",
+            'file' => 'resources/lang/' . $lang->locale . '.json',
+            'strings_count' => count($json),
+            'last_build_at' => $lang->last_build_at
+        ]);
+    }
+
+    /**
+     * API: Get translation stats for a locale
+     */
+    public function getStatsApi(Request $request, $locale)
+    {
+        $lang = Language::where('locale', $locale)->first();
+        if (empty($lang)) {
+            return response()->json(['error' => 'Language not found'], 404);
+        }
+
+        $totalQuery = Translation::where('locale', 'raw')->count();
+        $translatedQuery = Translation::where('locale', $lang->locale)
+            ->whereRaw("IFNULL(string,'') != ''")
+            ->count();
+
+        return response()->json([
+            'total' => $totalQuery,
+            'translated' => $translatedQuery,
+            'not_translated' => $totalQuery - $translatedQuery,
+            'progress' => $totalQuery > 0 ? round(($translatedQuery / $totalQuery) * 100) : 0
+        ]);
+    }
+
+    /**
+     * API: Export translations
+     */
+    public function exportTranslations(Request $request, $locale)
+    {
+        $lang = Language::where('locale', $locale)->first();
+        if (empty($lang)) {
+            return response()->json(['error' => 'Language not found'], 404);
+        }
+
+        $format = $request->format ?? 'json';
+
+        $query = Translation::select([
+            'core_translations.*',
+            't.string as origin'
+        ])->where('core_translations.locale', $lang->locale)
+          ->whereRaw("IFNULL(core_translations.string,'') != '' ");
+
+        $query->join('core_translations as t', function ($join) use ($lang) {
+            $join->on('t.id', '=', 'core_translations.parent_id');
+            $join->where('t.locale', 'raw');
+        });
+
+        $translations = [];
+        $rows = $query->get();
+        foreach ($rows as $row) {
+            $translations[$row['origin']] = $row['string'];
+        }
+
+        if ($format === 'csv') {
+            $output = "key,translation\n";
+            foreach ($translations as $key => $value) {
+                $output .= '"' . str_replace('"', '""', $key) . '","' . str_replace('"', '""', $value) . "\"\n";
+            }
+            return response($output)
+                ->header('Content-Type', 'text/csv')
+                ->header('Content-Disposition', 'attachment; filename="' . $locale . '_translations.csv"');
+        }
+
+        return response()->json($translations)
+            ->header('Content-Disposition', 'attachment; filename="' . $locale . '_translations.json"');
+    }
+
+    /**
+     * API: Scan for new translatable strings
+     */
+    public function scanForStringsApi()
+    {
+        $count = $this->findTranslations();
+
+        return response()->json([
+            'success' => true,
+            'found' => $count,
+            'message' => "Found and added {$count} translatable strings"
+        ]);
+    }
 }
