@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Carbon;
 use Modules\Contact\Models\Contact;
 use Modules\Tour\Models\Tour;
@@ -27,69 +28,77 @@ class DashboardController extends Controller
             $last7Days = Carbon::now()->subDays(7);
 
             // Contact/Inquiry Statistics
-            $totalInquiries = Contact::count();
-            $newInquiriesLast24h = Contact::where('created_at', '>=', $last24Hours)->count();
-            $newInquiriesLast7Days = Contact::where('created_at', '>=', $last7Days)->count();
-
+            $totalInquiries = Schema::hasTable('bc_contact') ? Contact::count() : 0;
+            $newInquiriesLast24h = Schema::hasTable('bc_contact') ? Contact::where('created_at', '>=', $last24Hours)->count() : 0;
+            $newInquiriesLast7Days = Schema::hasTable('bc_contact') ? Contact::where('created_at', '>=', $last7Days)->count() : 0;
+            
             // Unread submissions (status = 'new' or null)
-            $unreadSubmissions = Contact::where(function($query) {
+            $unreadSubmissions = Schema::hasTable('bc_contact') ? Contact::where(function($query) {
                 $query->where('status', 'new')
                       ->orWhereNull('status');
-            })->count();
-
+            })->count() : 0;
+            
             // Quote requests (form_type = 'quote')
-            $quoteRequests = Contact::where('form_type', 'quote')->count();
-
+            $quoteRequests = Schema::hasTable('bc_contact') ? Contact::where('form_type', 'quote')->count() : 0;
+            
             // Replied submissions
-            $repliedSubmissions = Contact::where('status', 'replied')->count();
-
+            $repliedSubmissions = Schema::hasTable('bc_contact') ? Contact::where('status', 'replied')->count() : 0;
             // Tours Statistics
-            $toursLive = Tour::where('status', 'publish')->count();
-            $draftTours = Tour::where('status', 'draft')->count();
-            $totalTours = Tour::count();
+            $toursLive = Schema::hasTable('bc_tours') ? Tour::where('status', 'publish')->count() : 0;
+            $draftTours = Schema::hasTable('bc_tours') ? Tour::where('status', 'draft')->count() : 0;
+            $totalTours = Schema::hasTable('bc_tours') ? Tour::count() : 0;
 
             // Destinations Statistics
-            $destinationsLive = Location::where('status', 'publish')->count();
-            $totalDestinations = Location::count();
+            $destinationsLive = Schema::hasTable('bc_locations') ? Location::where('status', 'publish')->count() : 0;
+            $totalDestinations = Schema::hasTable('bc_locations') ? Location::count() : 0;
 
             // Pages Statistics
-            $draftPages = Page::where('status', 'draft')->count();
-            $totalPages = Page::count();
+            $draftPages = Schema::hasTable('core_pages') ? Page::where('status', 'draft')->count() : 0;
+            $totalPages = Schema::hasTable('core_pages') ? Page::count() : 0;
 
             // Missing SEO - pages and tours without meta_title or meta_desc
-            $missingSeoTours = DB::table('bc_tours')
-                ->leftJoin('core_seos', function($join) {
-                    $join->on('bc_tours.id', '=', 'core_seos.object_id')
-                         ->where('core_seos.object_model', '=', 'tour');
-                })
-                ->where('bc_tours.deleted_at', null)
-                ->where(function($query) {
-                    $query->whereNull('core_seos.seo_title')
-                          ->orWhere('core_seos.seo_title', '')
-                          ->orWhereNull('core_seos.seo_desc')
-                          ->orWhere('core_seos.seo_desc', '');
-                })
-                ->count();
+            $missingSeoTours = 0;
+            $missingSeoPages = 0;
+            
+            if (Schema::hasTable('bc_seo')) {
+                if (Schema::hasTable('bc_tours')) {
+                    $missingSeoTours = DB::table('bc_tours')
+                        ->leftJoin('bc_seo', function($join) {
+                            $join->on('bc_tours.id', '=', 'bc_seo.object_id')
+                                 ->where('bc_seo.object_model', '=', 'tour');
+                        })
+                        ->where('bc_tours.deleted_at', null)
+                        ->where(function($query) {
+                            $query->whereNull('bc_seo.seo_title')
+                                  ->orWhere('bc_seo.seo_title', '')
+                                  ->orWhereNull('bc_seo.seo_desc')
+                                  ->orWhere('bc_seo.seo_desc', '');
+                        })
+                        ->count();
+                }
 
-            $missingSeoPages = DB::table('core_pages')
-                ->leftJoin('core_seos', function($join) {
-                    $join->on('core_pages.id', '=', 'core_seos.object_id')
-                         ->where('core_seos.object_model', '=', 'page');
-                })
-                ->where('core_pages.deleted_at', null)
-                ->where(function($query) {
-                    $query->whereNull('core_seos.seo_title')
-                          ->orWhere('core_seos.seo_title', '')
-                          ->orWhereNull('core_seos.seo_desc')
-                          ->orWhere('core_seos.seo_desc', '');
-                })
-                ->count();
+                if (Schema::hasTable('core_pages')) {
+                    $missingSeoPages = DB::table('core_pages')
+                        ->leftJoin('bc_seo', function($join) {
+                            $join->on('core_pages.id', '=', 'bc_seo.object_id')
+                                 ->where('bc_seo.object_model', '=', 'page');
+                        })
+                        ->where('core_pages.deleted_at', null)
+                        ->where(function($query) {
+                            $query->whereNull('bc_seo.seo_title')
+                                  ->orWhere('bc_seo.seo_title', '')
+                                  ->orWhereNull('bc_seo.seo_desc')
+                                  ->orWhere('bc_seo.seo_desc', '');
+                        })
+                        ->count();
+                }
+            }
 
             $missingSeo = $missingSeoTours + $missingSeoPages;
 
             // Pending Reviews
             $pendingReviews = 0;
-            if (class_exists('Modules\Review\Models\Review')) {
+            if (Schema::hasTable('bravo_review') && class_exists('Modules\Review\Models\Review')) {
                 $pendingReviews = Review::where('status', 'pending')->count();
             }
 
@@ -142,13 +151,18 @@ class DashboardController extends Controller
         try {
             $limit = $request->input('limit', 10);
 
+            if (!Schema::hasTable('bc_contact')) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [],
+                ]);
+            }
+
             $submissions = Contact::with('tour:id,title')
             ->select([
                 'id',
                 'name',
                 'email',
-                'phone',
-                'message',
                 'status',
                 'form_type',
                 'tour_id',
@@ -358,6 +372,13 @@ class DashboardController extends Controller
     public function updateSubmissionStatus(Request $request, $id)
     {
         try {
+            if (!Schema::hasTable('bc_contact')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Contact table not found',
+                ], 404);
+            }
+
             $request->validate([
                 'status' => 'required|in:new,read,replied,archived',
             ]);
