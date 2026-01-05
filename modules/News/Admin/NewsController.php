@@ -119,12 +119,18 @@ class NewsController extends AdminController
 
     public function store(Request $request, $id){
         if(is_demo_mode()){
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => __("DEMO MODE: Disable update")], 403);
+            }
             return redirect()->back()->with('danger',__("DEMO MODE: Disable update"));
         }
         if($id>0){
             $this->checkPermission('news_update');
             $row = News::find($id);
             if (empty($row)) {
+                if ($request->wantsJson() || $request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => __('News not found')], 404);
+                }
                 return redirect(route('news.admin.index'));
             }
         }else{
@@ -163,49 +169,79 @@ class NewsController extends AdminController
             if(is_default_lang($request->query('lang'))){
                 $row->saveTag($request->input('tag_name'), $request->input('tag_ids'));
             }
+
+            // Return JSON for API requests
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $id > 0 ? __('News updated') : __('News created'),
+                    'data' => $row->load(['author', 'category', 'tags'])
+                ]);
+            }
+
             if($id > 0 ){
                 return back()->with('success',  __('News updated') );
             }else{
                 return redirect(route('news.admin.edit',$row->id))->with('success', __('News created') );
             }
         }
+
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json(['success' => false, 'message' => __('Failed to save')], 500);
+        }
+        return back()->with('error', __('Failed to save'));
     }
 
     public function bulkEdit(Request $request)
     {
         if(is_demo_mode()){
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => __("DEMO MODE: Disable update")], 403);
+            }
             return redirect()->back()->with('danger',__("DEMO MODE: Disable update"));
         }
         $this->checkPermission('news_update');
         $ids = $request->input('ids');
         $action = $request->input('action');
+
         if (empty($ids) or !is_array($ids)) {
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => __('No items selected!')], 400);
+            }
             return redirect()->back()->with('error', __('No items selected!'));
         }
         if (empty($action)) {
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => __('Please select an action!')], 400);
+            }
             return redirect()->back()->with('error', __('Please select an action!'));
         }
+
         if ($action == "delete") {
             foreach ($ids as $id) {
                 $query = News::where("id", $id);
                 if (!$this->hasPermission('news_manage_others')) {
-                    $query->where("create_user", Auth::id());
+                    $query->where("create_user", \Auth::id());
                     $this->checkPermission('news_delete');
                 }
-                $query->first();
-                if(!empty($query)){
-                    $query->delete();
+                $row = $query->first();
+                if(!empty($row)){
+                    $row->delete();
                 }
             }
         } else {
             foreach ($ids as $id) {
                 $query = News::where("id", $id);
                 if (!$this->hasPermission('news_manage_others')) {
-                    $query->where("create_user", Auth::id());
+                    $query->where("create_user", \Auth::id());
                     $this->checkPermission('news_update');
                 }
                 $query->update(['status' => $action]);
             }
+        }
+
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => __('Update success!')]);
         }
         return redirect()->back()->with('success', __('Update success!'));
     }
