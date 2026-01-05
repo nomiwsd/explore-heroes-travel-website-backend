@@ -131,13 +131,21 @@ class NewsController extends AdminController
             $this->checkPermission('news_create');
             $row = new News();
             $row->status = "publish";
+            // Set author to current logged in user for new posts
+            $row->author_id = \Auth::id();
         }
 
         $row->fill($request->input());
         if($request->input('slug')){
             $row->slug = $request->input('slug');
         }
-        $row->author_id = $request->input('author_id');
+        // Allow override of author_id only if provided in request
+        if($request->input('author_id')){
+            $row->author_id = $request->input('author_id');
+        } elseif(!$row->author_id) {
+            // Fallback to current user if no author set
+            $row->author_id = \Auth::id();
+        }
         $res = $row->saveOriginOrTranslation($request->query('lang'),true);
 
         if ($res) {
