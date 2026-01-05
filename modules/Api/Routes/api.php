@@ -78,8 +78,12 @@ Route::group(['prefix'=>config('booking.booking_route_prefix')],function(){
 // Gateways
 Route::get('/gateways','BookingController@getGatewaysForApi');
 
-// News
-Route::get('news','NewsController@search')->name('api.news.search');
+// News - Specific routes must come before the wildcard {id} route
+Route::get('news','NewsController@search')->name('api.news.list');
+Route::get('news/featured','NewsController@featured')->name('api.news.featured.main');
+Route::get('news/categories','NewsController@category')->name('api.news.categories.main');
+Route::get('news/locations','NewsController@locations')->name('api.news.locations.main');
+Route::get('news/all-locations','NewsController@allLocations')->name('api.news.all-locations.main');
 Route::get('news/category','NewsController@category')->name('api.news.category');
 Route::get('news/{id}','NewsController@detail')->name('api.news.detail');
 
