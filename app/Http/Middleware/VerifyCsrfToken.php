@@ -15,6 +15,8 @@ class VerifyCsrfToken extends Middleware
 		//
 		'*/gateway_callback/*',
         'api/*',
+        'module/*',
+        'media/*',
         'admin/module/language/translations/*',
         'admin/module/language/*',
         'admin/module/*',

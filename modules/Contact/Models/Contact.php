@@ -23,8 +23,31 @@ class Contact extends BaseModel
         'subject',
         'travel_date',
         'number_of_people',
-        'special_requirements'
+        'special_requirements',
+        'notes'
     ];
+    
+    // Available statuses for form submissions
+    const STATUS_NEW = 'new';
+    const STATUS_READ = 'read';
+    const STATUS_CONTACTED = 'contacted';
+    const STATUS_QUOTED = 'quoted';
+    const STATUS_CONFIRMED = 'confirmed';
+    const STATUS_CLOSED = 'closed';
+    const STATUS_ARCHIVED = 'archived';
+    
+    public static function getStatuses()
+    {
+        return [
+            self::STATUS_NEW => 'New',
+            self::STATUS_READ => 'Read',
+            self::STATUS_CONTACTED => 'Contacted',
+            self::STATUS_QUOTED => 'Quoted',
+            self::STATUS_CONFIRMED => 'Confirmed',
+            self::STATUS_CLOSED => 'Closed',
+            self::STATUS_ARCHIVED => 'Archived',
+        ];
+    }
 
     /**
      * Get the tour associated with this contact (for quote requests)

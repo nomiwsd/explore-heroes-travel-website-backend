@@ -74,6 +74,7 @@ class Kernel extends HttpKernel
         'throttle'             => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified'             => \App\Http\Middleware\EnsureEmailIsVerified::class,
         "dashboard"            => \App\Http\Middleware\Dashboard::class,
+        "api_dashboard"        => \App\Http\Middleware\ApiDashboard::class,
         "translation_manager"  => \App\Http\Middleware\TranslationManager::class,
         "system_log_view"      => \App\Http\Middleware\CheckForLogPermission::class,
         "set_language_for_api" => \App\Http\Middleware\SetLanguageForApi::class,

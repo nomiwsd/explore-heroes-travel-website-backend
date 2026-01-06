@@ -26,24 +26,50 @@ class ContactController extends AdminController
     {
         $this->checkPermission('contact_manage');
 
-        $s = $request->query('s');
-        $datapage = New Contact;
+        $query = Contact::query();
+        
+        $s = $request->query('s') ?? $request->query('search');
         if ($s) {
-            $datapage->where(function ($query) use ($s){
-                $query->where('name', 'LIKE', '%' . $s . '%')
+            $query->where(function ($q) use ($s){
+                $q->where('name', 'LIKE', '%' . $s . '%')
                     ->orWhere('email','LIKE', '%' . $s . '%')
-                    ->orWhere('message','LIKE', '%' . $s . '%')
-                ;
+                    ->orWhere('message','LIKE', '%' . $s . '%');
             });
         }
+        
+        // Filter by status
+        if ($request->has('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+        
+        // Filter by form_type
+        if ($request->has('form_type') && $request->form_type !== 'all') {
+            $query->where('form_type', $request->form_type);
+        }
+        
+        $query->orderBy('created_at', 'desc');
 
         // Return JSON for API requests
         if ($request->wantsJson() || $request->expectsJson()) {
-            return response()->json($datapage->paginate(20));
+            $contacts = $query->with('tour:id,title')->paginate(20);
+            
+            // Transform to include tour_name
+            $transformed = $contacts->getCollection()->map(function ($contact) {
+                $data = $contact->toArray();
+                $data['tour_name'] = $contact->tour ? $contact->tour->title : null;
+                return $data;
+            });
+            
+            return response()->json([
+                'data' => $transformed,
+                'total' => $contacts->total(),
+                'per_page' => $contacts->perPage(),
+                'current_page' => $contacts->currentPage(),
+            ]);
         }
 
         $data = [
-            'rows'        => $datapage->paginate(20),
+            'rows'        => $query->paginate(20),
             'breadcrumbs' => [
                 [
                     'name' => __('Contact Submissions'),
@@ -56,6 +82,63 @@ class ContactController extends AdminController
             ]
         ];
         return view('Contact::admin.index', $data);
+    }
+    
+    /**
+     * Get a single submission
+     */
+    public function show(Request $request, $id)
+    {
+        $this->checkPermission('contact_manage');
+        
+        $contact = Contact::with('tour:id,title')->findOrFail($id);
+        
+        // Mark as read if new
+        if ($contact->status === 'new' || empty($contact->status)) {
+            $contact->status = 'read';
+            $contact->save();
+        }
+        
+        $data = $contact->toArray();
+        $data['tour_name'] = $contact->tour ? $contact->tour->title : null;
+        
+        return response()->json($data);
+    }
+    
+    /**
+     * Update a submission (status, notes)
+     */
+    public function update(Request $request, $id)
+    {
+        $this->checkPermission('contact_manage');
+        
+        $contact = Contact::findOrFail($id);
+        
+        $validStatuses = array_keys(Contact::getStatuses());
+        
+        $request->validate([
+            'status' => 'nullable|string|in:' . implode(',', $validStatuses),
+            'notes' => 'nullable|string|max:5000',
+        ]);
+        
+        if ($request->has('status')) {
+            $contact->status = $request->status;
+        }
+        
+        if ($request->has('notes')) {
+            $contact->notes = $request->notes;
+        }
+        
+        $contact->save();
+        
+        $data = $contact->toArray();
+        $data['tour_name'] = $contact->tour ? $contact->tour->title : null;
+        
+        return response()->json([
+            'status' => 1,
+            'message' => 'Submission updated successfully',
+            'data' => $data
+        ]);
     }
 
     public function getForSelect2(Request $request)
@@ -77,12 +160,21 @@ class ContactController extends AdminController
 
         $ids = $request->input('ids');
         $action = $request->input('action');
+        $status = $request->input('status');
+        
         if (empty($ids)) {
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json(['status' => 0, 'message' => 'Please select at least 1 item!'], 400);
+            }
             return redirect()->back()->with('error', __('Please select at least 1 item!'));
         }
         if (empty($action)) {
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json(['status' => 0, 'message' => 'No Action is selected!'], 400);
+            }
             return redirect()->back()->with('error', __('No Action is selected!'));
         }
+        
         if ($action == "delete") {
             foreach ($ids as $id) {
                 $query = Contact::where("id", $id)->first();
@@ -90,12 +182,27 @@ class ContactController extends AdminController
                     $query->delete();
                 }
             }
+            $message = count($ids) . ' submission(s) deleted successfully';
+        } elseif ($action == "update_status" && $status) {
+            // Update to specific status
+            foreach ($ids as $id) {
+                $query = Contact::where("id", $id);
+                $query->update(['status' => $status]);
+            }
+            $message = count($ids) . ' submission(s) updated to ' . $status;
         } else {
+            // Action is the status itself (legacy support)
             foreach ($ids as $id) {
                 $query = Contact::where("id", $id);
                 $query->update(['status' => $action]);
             }
+            $message = count($ids) . ' submission(s) updated successfully';
         }
+        
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json(['status' => 1, 'message' => $message]);
+        }
+        
         return redirect()->back()->with('success', __('Update success!'));
     }
 

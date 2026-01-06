@@ -40,6 +40,8 @@ class RouterServiceProvider extends ServiceProvider
         $this->mapWebRoutes();
 
         $this->mapAdminRoutes();
+        
+        $this->mapModuleRoutes();
 
         $this->mapLanguageRoutes();
     }
@@ -82,9 +84,20 @@ class RouterServiceProvider extends ServiceProvider
      */
     protected function mapAdminRoutes()
     {
-        Route::middleware(['web','dashboard'])
+        Route::middleware(['web','api_dashboard'])
             ->namespace($this->adminModuleNamespace)
             ->prefix(config('admin.admin_route_prefix').'/module/location')
+            ->group(__DIR__ . '/Routes/admin.php');
+    }
+    
+    /**
+     * Define the "module" routes for API access.
+     */
+    protected function mapModuleRoutes()
+    {
+        Route::middleware(['web','api_dashboard'])
+            ->namespace($this->adminModuleNamespace)
+            ->prefix('module/location')
             ->group(__DIR__ . '/Routes/admin.php');
     }
 

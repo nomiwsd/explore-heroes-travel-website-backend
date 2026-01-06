@@ -15,7 +15,7 @@
         |
         */
 
-'paths' => ['api/*', 'module/*', 'admin/*', 'sanctum/csrf-cookie'],
+'paths' => ['api/*', 'module/*', 'admin/*', 'media/*', 'contact/*', 'sanctum/csrf-cookie'],
 
     'allowed_methods' => ['*'],
 

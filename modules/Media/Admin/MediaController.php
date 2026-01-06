@@ -94,18 +94,25 @@ class MediaController extends Controller
         }
         $uploadConfigs = config('bc.media.groups');
 
-        if(!isset($uploadConfigs[$file_type])){
-            return $this->sendError('File type not found');
-        }
+        // Handle 'all' type - show all images/files
+        if ($file_type !== 'all') {
+            if(!isset($uploadConfigs[$file_type])){
+                return $this->sendError('File type not found');
+            }
 
-        $config = isset($uploadConfigs[$file_type]) ? $uploadConfigs[$file_type] : $uploadConfigs['default'];
-        $model->whereIn('file_extension',$config['ext']);
+            $config = isset($uploadConfigs[$file_type]) ? $uploadConfigs[$file_type] : $uploadConfigs['default'];
+            $model->whereIn('file_extension',$config['ext']);
+        }
 
         if($folder_id = $request->input('folder_id'))
         {
             $model->where('folder_id',$folder_id);
         }else{
-            $model->where('folder_id',0);
+            // Show all files when no folder is selected (folder_id = 0 or NULL)
+            $model->where(function($query) {
+                $query->where('folder_id', 0)
+                      ->orWhereNull('folder_id');
+            });
         }
         if ($s) {
             $model->where('file_name', 'like', '%' . ($s) . '%');
@@ -238,6 +245,49 @@ class MediaController extends Controller
 
             $res = $file->editImage($image_data);
             return $this->sendSuccess($res);
+
+        } catch (\Exception $exception) {
+            return $this->sendError($exception->getMessage());
+        }
+    }
+
+    /**
+     * Update media file metadata (alt_text, title, description)
+     */
+    public function update(Request $request, $id)
+    {
+        if (!$this->hasPermissionMedia()) {
+            return $this->sendError('You do not have permission to update this file');
+        }
+
+        $file = MediaFile::find($id);
+        if (!$file) {
+            return $this->sendError("File not found");
+        }
+
+        // Check if user can edit this file
+        if (!Auth::user()->hasPermission("media_manage_others") && $file->author_id != Auth::id()) {
+            return $this->sendError('You do not have permission to update this file');
+        }
+
+        try {
+            // Update metadata fields
+            if ($request->has('alt_text')) {
+                $file->alt_text = $request->input('alt_text');
+            }
+            if ($request->has('title')) {
+                $file->title = $request->input('title');
+            }
+            if ($request->has('description')) {
+                $file->description = $request->input('description');
+            }
+            
+            $file->save();
+
+            return $this->sendSuccess([
+                'data' => new MediaResource($file),
+                'message' => 'File updated successfully'
+            ]);
 
         } catch (\Exception $exception) {
             return $this->sendError($exception->getMessage());

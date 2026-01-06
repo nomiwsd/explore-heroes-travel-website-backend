@@ -99,9 +99,15 @@ class TagController extends AdminController
         $ids = $request->input('ids');
         $action = $request->input('action');
         if (empty($ids) or !is_array($ids)) {
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => __('Please select at least 1 item!')], 400);
+            }
             return redirect()->back()->with('error', __('Please select at least 1 item!'));
         }
         if (empty($action)) {
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => __('Please select an Action!')], 400);
+            }
             return redirect()->back()->with('error', __('Please select an Action!'));
         }
         if ($action == 'delete') {
@@ -112,6 +118,10 @@ class TagController extends AdminController
                 }
                 NewsTag::where('tag_id', $id)->delete();
             }
+        }
+        
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => __('Update success!')]);
         }
         return redirect()->back()->with('success', __('Update success!'));
     }

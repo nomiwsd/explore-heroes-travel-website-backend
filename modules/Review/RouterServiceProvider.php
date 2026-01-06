@@ -39,6 +39,8 @@ class RouterServiceProvider extends ServiceProvider
         $this->mapWebRoutes();
 
         $this->mapAdminRoutes();
+        
+        $this->mapModuleRoutes();
 
         $this->mapLanguageRoutes();
     }
@@ -66,11 +68,27 @@ class RouterServiceProvider extends ServiceProvider
      */
     protected function mapAdminRoutes()
     {
-        Route::middleware(['web','dashboard'])
+        Route::middleware(['web','api_dashboard'])
             ->namespace($this->adminModuleNamespace)
             ->prefix(config('admin.admin_route_prefix').'/module/review')
             ->group(__DIR__ . '/Routes/admin.php');
     }
+    
+    /**
+     * Define the "module" routes for API access.
+     *
+     * These routes are accessible via /module/review for frontend API calls.
+     *
+     * @return void
+     */
+    protected function mapModuleRoutes()
+    {
+        Route::middleware(['web','api_dashboard'])
+            ->namespace($this->adminModuleNamespace)
+            ->prefix('module/review')
+            ->group(__DIR__ . '/Routes/admin.php');
+    }
+    
     /**
      * Define the "lang" routes for the application.
      *
