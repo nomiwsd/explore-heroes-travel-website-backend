@@ -97,15 +97,7 @@ return [
                 'pusher_app_secret'     => 'max:50',
                 'database_password'     => 'not_regex:/([#])/',
                 'admin_email'           => 'required|string|max:50|email',
-                'admin_password'        =>  [
-                                                'required',
-                                                'string',
-                                                Password::min(8)
-                                                    ->mixedCase()
-                                                    ->numbers()
-                                                    ->symbols()
-                                                    ->uncompromised(),
-                                            ],
+                'admin_password'        => 'required|string|min:8',
             ],
         ],
     ],
