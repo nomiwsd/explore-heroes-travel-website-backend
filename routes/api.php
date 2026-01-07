@@ -1910,6 +1910,10 @@ Route::prefix('module/page')->group(function () {
                 $query->where('title', 'LIKE', '%' . $request->page_name . '%');
             }
             
+            if ($request->has('s') && $request->s) {
+                $query->where('title', 'LIKE', '%' . $request->s . '%');
+            }
+            
             if ($request->has('status') && $request->status) {
                 $query->where('status', $request->status);
             }
@@ -1932,6 +1936,19 @@ Route::prefix('module/page')->group(function () {
         try {
             $page = \DB::table('bc_pages')->where('id', $id)->first();
             return response()->json(['data' => $page]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // Get page by slug (public)
+    Route::get('/slug/{slug}', function ($slug) {
+        try {
+            $page = \DB::table('bc_pages')->where('slug', $slug)->where('status', 'publish')->first();
+            if (!$page) {
+                return response()->json(['error' => 'Page not found'], 404);
+            }
+            return response()->json($page);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
@@ -2006,5 +2023,1006 @@ Route::prefix('module/page')->group(function () {
         return response()->json([
             'slug' => \Illuminate\Support\Str::slug($request->input('title'))
         ]);
+    });
+});
+
+// =====================================================
+// PUBLIC NEWS/BLOG API (no auth required)
+// =====================================================
+Route::prefix('news')->group(function () {
+    // Get all published posts
+    Route::get('/', function (Request $request) {
+        try {
+            $query = \DB::table('bc_news')->where('status', 'publish');
+            
+            // Filter by category
+            if ($request->has('cat_id') && $request->cat_id) {
+                $query->where('cat_id', $request->cat_id);
+            }
+            
+            // Filter by featured
+            if ($request->has('is_featured') && $request->is_featured) {
+                $query->where('is_featured', 1);
+            }
+            
+            // Search
+            if ($request->has('s') && $request->s) {
+                $query->where('title', 'LIKE', '%' . $request->s . '%');
+            }
+            
+            $posts = $query->orderBy('id', 'desc')->paginate($request->per_page ?? 10);
+            
+            // Transform data with images
+            $data = collect($posts->items())->map(function ($post) {
+                $post->image_url = $post->image_id ? get_file_url($post->image_id, 'full') : null;
+                return $post;
+            });
+            
+            return response()->json([
+                'data' => $data,
+                'total' => $posts->total(),
+                'current_page' => $posts->currentPage(),
+                'last_page' => $posts->lastPage(),
+                'per_page' => $posts->perPage(),
+                'total_pages' => $posts->lastPage(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['data' => [], 'total' => 0, 'error' => $e->getMessage()]);
+        }
+    });
+    
+    // Get featured posts
+    Route::get('/featured', function (Request $request) {
+        try {
+            $limit = $request->get('limit', 6);
+            $posts = \DB::table('bc_news')
+                ->where('status', 'publish')
+                ->where('is_featured', 1)
+                ->orderBy('id', 'desc')
+                ->limit($limit)
+                ->get();
+            
+            $data = $posts->map(function ($post) {
+                $post->image_url = $post->image_id ? get_file_url($post->image_id, 'full') : null;
+                return $post;
+            });
+            
+            return response()->json(['data' => $data]);
+        } catch (\Exception $e) {
+            return response()->json(['data' => [], 'error' => $e->getMessage()]);
+        }
+    });
+    
+    // Get public categories
+    Route::get('/categories', function () {
+        try {
+            $categories = \DB::table('bc_news_category')
+                ->where('status', 'publish')
+                ->orderBy('name')
+                ->get();
+            return response()->json(['data' => $categories]);
+        } catch (\Exception $e) {
+            return response()->json(['data' => []]);
+        }
+    });
+    
+    // Get all locations for blogs
+    Route::get('/all-locations', function () {
+        try {
+            $locations = Location::where('status', 'publish')
+                ->orderBy('name')
+                ->get(['id', 'name', 'slug']);
+            return response()->json(['data' => $locations]);
+        } catch (\Exception $e) {
+            return response()->json(['data' => []]);
+        }
+    });
+    
+    // Get single post by slug
+    Route::get('/{slug}', function ($slug) {
+        try {
+            $post = \DB::table('bc_news')
+                ->where('slug', $slug)
+                ->where('status', 'publish')
+                ->first();
+            
+            if (!$post) {
+                return response()->json(['error' => 'Post not found'], 404);
+            }
+            
+            $post->image_url = $post->image_id ? get_file_url($post->image_id, 'full') : null;
+            
+            // Get category
+            if ($post->cat_id) {
+                $post->category = \DB::table('bc_news_category')->where('id', $post->cat_id)->first();
+            }
+            
+            // Get related posts
+            $related = \DB::table('bc_news')
+                ->where('status', 'publish')
+                ->where('id', '!=', $post->id)
+                ->when($post->cat_id, function ($q) use ($post) {
+                    return $q->where('cat_id', $post->cat_id);
+                })
+                ->orderBy('id', 'desc')
+                ->limit(4)
+                ->get()
+                ->map(function ($p) {
+                    $p->image_url = $p->image_id ? get_file_url($p->image_id, 'full') : null;
+                    return $p;
+                });
+            
+            $post->related_posts = $related;
+            
+            return response()->json(['data' => $post]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+});
+
+// =====================================================
+// PUBLIC PAGES API (no auth required)
+// =====================================================
+Route::prefix('pages')->group(function () {
+    // Get page by slug
+    Route::get('/{slug}', function ($slug) {
+        try {
+            $page = \DB::table('bc_pages')
+                ->where('slug', $slug)
+                ->where('status', 'publish')
+                ->first();
+            
+            if (!$page) {
+                return response()->json(['error' => 'Page not found'], 404);
+            }
+            
+            return response()->json(['data' => $page]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+});
+
+// =====================================================
+// MODULE MEDIA API (Admin functionality)
+// =====================================================
+Route::prefix('module/media')->middleware('auth:sanctum')->group(function () {
+    // Get media files list
+    Route::post('/getLists', [\Modules\Media\Admin\MediaController::class, 'getLists']);
+    
+    // Upload file
+    Route::post('/store', [\Modules\Media\Admin\MediaController::class, 'store']);
+    
+    // Remove files
+    Route::post('/removeFiles', [\Modules\Media\Admin\MediaController::class, 'removeFiles']);
+    
+    // Update file metadata
+    Route::post('/{id}/update', [\Modules\Media\Admin\MediaController::class, 'update']);
+    
+    // Edit image
+    Route::post('/editImage', [\Modules\Media\Admin\MediaController::class, 'editImage']);
+    
+    // Get single file
+    Route::get('/{id}', function ($id) {
+        try {
+            $file = \Modules\Media\Models\MediaFile::findOrFail($id);
+            return response()->json(new \Modules\Media\Resources\MediaResource($file));
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+});
+
+// =====================================================
+// MODULE LANGUAGE TRANSLATIONS API (Admin functionality)
+// =====================================================
+Route::prefix('module/language/translations')->middleware('auth:sanctum')->group(function () {
+    // Get translations for a locale
+    Route::get('/{locale}', function ($locale, Request $request) {
+        try {
+            $langPath = base_path('resources/lang/' . $locale . '.json');
+            $translations = [];
+            
+            if (file_exists($langPath)) {
+                $content = file_get_contents($langPath);
+                $allTranslations = json_decode($content, true) ?? [];
+                
+                // Filter and paginate
+                $filter = $request->input('filter', 'all');
+                $search = $request->input('s', '');
+                $page = (int) $request->input('page', 1);
+                $perPage = (int) $request->input('per_page', 20);
+                
+                $filtered = [];
+                foreach ($allTranslations as $key => $value) {
+                    // Search filter
+                    if ($search && stripos($key, $search) === false && stripos($value, $search) === false) {
+                        continue;
+                    }
+                    
+                    // Translation status filter
+                    $isTranslated = !empty($value) && $value !== $key;
+                    if ($filter === 'translated' && !$isTranslated) continue;
+                    if ($filter === 'not_translated' && $isTranslated) continue;
+                    
+                    $filtered[] = [
+                        'key' => $key,
+                        'original' => $key,
+                        'translation' => $value,
+                    ];
+                }
+                
+                $total = count($filtered);
+                $translations = array_slice($filtered, ($page - 1) * $perPage, $perPage);
+                $translated = count(array_filter($allTranslations, fn($v, $k) => !empty($v) && $v !== $k, ARRAY_FILTER_USE_BOTH));
+                
+                return response()->json([
+                    'data' => $translations,
+                    'stats' => [
+                        'total' => count($allTranslations),
+                        'translated' => $translated,
+                        'not_translated' => count($allTranslations) - $translated,
+                        'progress' => count($allTranslations) > 0 ? round(($translated / count($allTranslations)) * 100) : 0,
+                    ],
+                    'meta' => [
+                        'current_page' => $page,
+                        'last_page' => ceil($total / $perPage),
+                        'per_page' => $perPage,
+                        'total' => $total,
+                    ],
+                ]);
+            }
+            
+            return response()->json([
+                'data' => [],
+                'stats' => ['total' => 0, 'translated' => 0, 'not_translated' => 0, 'progress' => 0],
+                'meta' => ['current_page' => 1, 'last_page' => 1, 'per_page' => 20, 'total' => 0],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // Save translations
+    Route::post('/{locale}/save', function ($locale, Request $request) {
+        try {
+            $langPath = base_path('resources/lang/' . $locale . '.json');
+            $translations = [];
+            
+            if (file_exists($langPath)) {
+                $content = file_get_contents($langPath);
+                $translations = json_decode($content, true) ?? [];
+            }
+            
+            // Update translations
+            $newTranslations = $request->input('translations', []);
+            foreach ($newTranslations as $item) {
+                if (isset($item['key'])) {
+                    $translations[$item['key']] = $item['value'] ?? '';
+                }
+            }
+            
+            // Save file
+            file_put_contents($langPath, json_encode($translations, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            
+            return response()->json([
+                'success' => true,
+                'saved' => count($newTranslations),
+                'message' => 'Translations saved successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // Build translations (copy to public folder)
+    Route::post('/{locale}/build', function ($locale) {
+        try {
+            $langPath = base_path('resources/lang/' . $locale . '.json');
+            $publicPath = base_path('public/locales/' . $locale . '.json');
+            
+            if (!file_exists($langPath)) {
+                return response()->json(['error' => 'Language file not found'], 404);
+            }
+            
+            // Ensure public directory exists
+            $publicDir = dirname($publicPath);
+            if (!is_dir($publicDir)) {
+                mkdir($publicDir, 0755, true);
+            }
+            
+            // Copy file
+            copy($langPath, $publicPath);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Translations built successfully',
+                'file' => $publicPath,
+                'last_build_at' => now()->toISOString(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // Get translation stats
+    Route::get('/{locale}/stats', function ($locale) {
+        try {
+            $langPath = base_path('resources/lang/' . $locale . '.json');
+            
+            if (!file_exists($langPath)) {
+                return response()->json([
+                    'total' => 0,
+                    'translated' => 0,
+                    'not_translated' => 0,
+                    'progress' => 0,
+                ]);
+            }
+            
+            $content = file_get_contents($langPath);
+            $translations = json_decode($content, true) ?? [];
+            
+            $translated = count(array_filter($translations, fn($v, $k) => !empty($v) && $v !== $k, ARRAY_FILTER_USE_BOTH));
+            
+            return response()->json([
+                'total' => count($translations),
+                'translated' => $translated,
+                'not_translated' => count($translations) - $translated,
+                'progress' => count($translations) > 0 ? round(($translated / count($translations)) * 100) : 0,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+});
+
+// =====================================================
+// MODULE TOUR BULK EDIT API (Admin)
+// =====================================================
+Route::middleware('auth:sanctum')->post('/module/tour/bulkEdit', function (Request $request) {
+    try {
+        $ids = $request->input('ids', []);
+        $action = $request->input('action');
+        
+        if (empty($ids)) {
+            return response()->json(['error' => 'No items selected'], 400);
+        }
+        
+        switch ($action) {
+            case 'delete':
+                Tour::whereIn('id', $ids)->delete();
+                break;
+            case 'publish':
+                Tour::whereIn('id', $ids)->update(['status' => 'publish']);
+                break;
+            case 'draft':
+                Tour::whereIn('id', $ids)->update(['status' => 'draft']);
+                break;
+            default:
+                return response()->json(['error' => 'Invalid action'], 400);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => ucfirst($action) . ' completed successfully',
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
+// =====================================================
+// MODULE CONTACT/FORMS API (Admin functionality)
+// =====================================================
+Route::prefix('module/contact')->group(function () {
+    // Public: Submit contact form
+    Route::post('/store', function (Request $request) {
+        try {
+            $id = \DB::table('bc_contact_submissions')->insertGetId([
+                'name' => $request->input('name'),
+                'email' => $request->input('email'),
+                'phone' => $request->input('phone'),
+                'subject' => $request->input('subject'),
+                'message' => $request->input('message'),
+                'form_type' => $request->input('form_type', 'contact'),
+                'tour_id' => $request->input('tour_id'),
+                'travel_date' => $request->input('travel_date'),
+                'number_of_people' => $request->input('number_of_people'),
+                'special_requirements' => $request->input('special_requirements'),
+                'status' => 'new',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            
+            return response()->json(['success' => true, 'id' => $id]);
+        } catch (\Exception $e) {
+            // Try bc_contact table if bc_contact_submissions doesn't exist
+            try {
+                $id = \DB::table('bc_contact')->insertGetId([
+                    'name' => $request->input('name'),
+                    'email' => $request->input('email'),
+                    'phone' => $request->input('phone'),
+                    'subject' => $request->input('subject'),
+                    'message' => $request->input('message'),
+                    'status' => 'new',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                return response()->json(['success' => true, 'id' => $id]);
+            } catch (\Exception $e2) {
+                return response()->json(['error' => $e2->getMessage()], 500);
+            }
+        }
+    });
+    
+    // Admin routes (protected)
+    Route::middleware('auth:sanctum')->group(function () {
+        // Get all submissions
+        Route::get('/', function (Request $request) {
+            try {
+                // Try bc_contact_submissions first
+                $table = 'bc_contact_submissions';
+                if (!\Schema::hasTable($table)) {
+                    $table = 'bc_contact';
+                }
+                
+                $query = \DB::table($table);
+                
+                if ($request->has('search') && $request->search) {
+                    $query->where(function ($q) use ($request) {
+                        $q->where('name', 'LIKE', '%' . $request->search . '%')
+                          ->orWhere('email', 'LIKE', '%' . $request->search . '%');
+                    });
+                }
+                
+                if ($request->has('status') && $request->status !== 'all') {
+                    $query->where('status', $request->status);
+                }
+                
+                if ($request->has('form_type') && $request->form_type !== 'all') {
+                    $query->where('form_type', $request->form_type);
+                }
+                
+                $submissions = $query->orderBy('id', 'desc')->paginate($request->per_page ?? 20);
+                
+                return response()->json([
+                    'data' => $submissions->items(),
+                    'total' => $submissions->total(),
+                    'current_page' => $submissions->currentPage(),
+                    'last_page' => $submissions->lastPage(),
+                ]);
+            } catch (\Exception $e) {
+                return response()->json(['data' => [], 'total' => 0, 'error' => $e->getMessage()]);
+            }
+        });
+        
+        // Get single submission
+        Route::get('/{id}', function ($id) {
+            try {
+                $table = \Schema::hasTable('bc_contact_submissions') ? 'bc_contact_submissions' : 'bc_contact';
+                $submission = \DB::table($table)->where('id', $id)->first();
+                return response()->json($submission);
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+        });
+        
+        // Update submission
+        Route::post('/{id}', function (Request $request, $id) {
+            try {
+                $table = \Schema::hasTable('bc_contact_submissions') ? 'bc_contact_submissions' : 'bc_contact';
+                
+                $data = [];
+                if ($request->has('status')) $data['status'] = $request->status;
+                if ($request->has('notes')) $data['notes'] = $request->notes;
+                $data['updated_at'] = now();
+                
+                \DB::table($table)->where('id', $id)->update($data);
+                
+                $submission = \DB::table($table)->where('id', $id)->first();
+                return response()->json(['data' => $submission, 'success' => true]);
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+        });
+        
+        // Bulk edit
+        Route::post('/bulkEdit', function (Request $request) {
+            try {
+                $table = \Schema::hasTable('bc_contact_submissions') ? 'bc_contact_submissions' : 'bc_contact';
+                $ids = $request->input('ids', []);
+                $action = $request->input('action');
+                
+                if (empty($ids)) {
+                    return response()->json(['error' => 'No items selected'], 400);
+                }
+                
+                switch ($action) {
+                    case 'delete':
+                        \DB::table($table)->whereIn('id', $ids)->delete();
+                        break;
+                    case 'update_status':
+                        $status = $request->input('status', 'read');
+                        \DB::table($table)->whereIn('id', $ids)->update(['status' => $status]);
+                        break;
+                }
+                
+                return response()->json(['success' => true]);
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+        });
+        
+        // Export CSV
+        Route::get('/export', function (Request $request) {
+            try {
+                $table = \Schema::hasTable('bc_contact_submissions') ? 'bc_contact_submissions' : 'bc_contact';
+                $submissions = \DB::table($table)->get();
+                
+                $csv = "ID,Name,Email,Phone,Subject,Message,Status,Created At\n";
+                foreach ($submissions as $s) {
+                    $csv .= "\"{$s->id}\",\"{$s->name}\",\"{$s->email}\",\"" . ($s->phone ?? '') . "\",\"" . ($s->subject ?? '') . "\",\"" . str_replace('"', '""', $s->message ?? '') . "\",\"{$s->status}\",\"{$s->created_at}\"\n";
+                }
+                
+                return response($csv)
+                    ->header('Content-Type', 'text/csv')
+                    ->header('Content-Disposition', 'attachment; filename="contacts.csv"');
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+        });
+    });
+});
+
+// Also register /contact/store for frontend form submission
+Route::post('/contact/store', function (Request $request) {
+    try {
+        // Try bc_contact_submissions first, fallback to bc_contact
+        $table = \Schema::hasTable('bc_contact_submissions') ? 'bc_contact_submissions' : 'bc_contact';
+        
+        $id = \DB::table($table)->insertGetId([
+            'name' => $request->input('name'),
+            'email' => $request->input('email'),
+            'phone' => $request->input('phone'),
+            'subject' => $request->input('subject'),
+            'message' => $request->input('message'),
+            'form_type' => $request->input('form_type', 'contact'),
+            'tour_id' => $request->input('tour_id'),
+            'status' => 'new',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        
+        return response()->json(['success' => true, 'id' => $id]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
+// =====================================================
+// MODULE REVIEW API (Admin functionality)
+// =====================================================
+Route::prefix('module/review')->group(function () {
+    // Admin routes (protected)
+    Route::middleware('auth:sanctum')->group(function () {
+        // Get all reviews
+        Route::get('/', function (Request $request) {
+            try {
+                $query = \DB::table('bc_review');
+                
+                if ($request->has('search') && $request->search) {
+                    $query->where(function ($q) use ($request) {
+                        $q->where('title', 'LIKE', '%' . $request->search . '%')
+                          ->orWhere('content', 'LIKE', '%' . $request->search . '%')
+                          ->orWhere('author_name', 'LIKE', '%' . $request->search . '%');
+                    });
+                }
+                
+                if ($request->has('status') && $request->status !== 'all') {
+                    $query->where('status', $request->status);
+                }
+                
+                if ($request->has('object_model') && $request->object_model) {
+                    $query->where('object_model', $request->object_model);
+                }
+                
+                if ($request->has('object_id') && $request->object_id) {
+                    $query->where('object_id', $request->object_id);
+                }
+                
+                if ($request->has('rating') && $request->rating) {
+                    $query->where('rate_number', $request->rating);
+                }
+                
+                $reviews = $query->orderBy('id', 'desc')->paginate($request->per_page ?? 20);
+                
+                return response()->json([
+                    'data' => $reviews->items(),
+                    'meta' => [
+                        'current_page' => $reviews->currentPage(),
+                        'last_page' => $reviews->lastPage(),
+                        'per_page' => $reviews->perPage(),
+                        'total' => $reviews->total(),
+                    ],
+                ]);
+            } catch (\Exception $e) {
+                return response()->json(['data' => [], 'meta' => [], 'error' => $e->getMessage()]);
+            }
+        });
+        
+        // Get single review
+        Route::get('/edit/{id}', function ($id) {
+            try {
+                $review = \DB::table('bc_review')->where('id', $id)->first();
+                
+                if (!$review) {
+                    return response()->json(['error' => 'Review not found'], 404);
+                }
+                
+                // Get review meta (category ratings)
+                $meta = \DB::table('bc_review_meta')->where('review_id', $id)->get();
+                $review->meta = $meta;
+                
+                return response()->json($review);
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+        });
+        
+        // Create review
+        Route::post('/store', function (Request $request) {
+            try {
+                $id = \DB::table('bc_review')->insertGetId([
+                    'object_id' => $request->input('object_id') ?? $request->input('tour_id'),
+                    'object_model' => $request->input('object_model', 'tour'),
+                    'author_id' => $request->user()->id ?? null,
+                    'title' => $request->input('title'),
+                    'content' => $request->input('content'),
+                    'rate_number' => $request->input('rating'),
+                    'status' => $request->input('status', 'approved'),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                
+                // Save meta if provided
+                if ($request->has('meta')) {
+                    foreach ($request->meta as $m) {
+                        \DB::table('bc_review_meta')->insert([
+                            'review_id' => $id,
+                            'name' => $m['name'],
+                            'val' => $m['val'],
+                        ]);
+                    }
+                }
+                
+                return response()->json(['success' => true, 'id' => $id]);
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+        });
+        
+        // Update review
+        Route::post('/store/{id}', function (Request $request, $id) {
+            try {
+                $data = [
+                    'title' => $request->input('title'),
+                    'content' => $request->input('content'),
+                    'rate_number' => $request->input('rating'),
+                    'status' => $request->input('status'),
+                    'updated_at' => now(),
+                ];
+                
+                // Only update provided fields
+                $data = array_filter($data, fn($v) => $v !== null);
+                
+                \DB::table('bc_review')->where('id', $id)->update($data);
+                
+                // Update meta if provided
+                if ($request->has('meta')) {
+                    \DB::table('bc_review_meta')->where('review_id', $id)->delete();
+                    foreach ($request->meta as $m) {
+                        \DB::table('bc_review_meta')->insert([
+                            'review_id' => $id,
+                            'name' => $m['name'],
+                            'val' => $m['val'],
+                        ]);
+                    }
+                }
+                
+                return response()->json(['success' => true, 'id' => $id]);
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+        });
+        
+        // Bulk edit
+        Route::post('/bulkEdit', function (Request $request) {
+            try {
+                $ids = $request->input('ids', []);
+                $action = $request->input('action');
+                
+                if (empty($ids)) {
+                    return response()->json(['error' => 'No items selected'], 400);
+                }
+                
+                switch ($action) {
+                    case 'delete':
+                        \DB::table('bc_review')->whereIn('id', $ids)->delete();
+                        \DB::table('bc_review_meta')->whereIn('review_id', $ids)->delete();
+                        break;
+                    case 'approve':
+                        \DB::table('bc_review')->whereIn('id', $ids)->update(['status' => 'approved']);
+                        break;
+                    case 'reject':
+                        \DB::table('bc_review')->whereIn('id', $ids)->update(['status' => 'rejected']);
+                        break;
+                    case 'pending':
+                        \DB::table('bc_review')->whereIn('id', $ids)->update(['status' => 'pending']);
+                        break;
+                }
+                
+                return response()->json(['success' => true]);
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+        });
+        
+        // Get stats for object
+        Route::get('/stats/{objectModel}/{objectId}', function ($objectModel, $objectId) {
+            try {
+                $reviews = \DB::table('bc_review')
+                    ->where('object_model', $objectModel)
+                    ->where('object_id', $objectId)
+                    ->where('status', 'approved')
+                    ->get();
+                
+                $total = $reviews->count();
+                $average = $total > 0 ? round($reviews->avg('rate_number'), 1) : 0;
+                
+                $counts = [];
+                for ($i = 1; $i <= 5; $i++) {
+                    $counts[$i] = $reviews->where('rate_number', $i)->count();
+                }
+                
+                return response()->json([
+                    'total' => $total,
+                    'average' => $average,
+                    'counts' => $counts,
+                ]);
+            } catch (\Exception $e) {
+                return response()->json(['total' => 0, 'average' => 0, 'counts' => []]);
+            }
+        });
+    });
+    
+    // Public: Get approved reviews for object
+    Route::get('/public/{objectModel}/{objectId}', function ($objectModel, $objectId) {
+        try {
+            $reviews = \DB::table('bc_review')
+                ->where('object_model', $objectModel)
+                ->where('object_id', $objectId)
+                ->where('status', 'approved')
+                ->orderBy('created_at', 'desc')
+                ->limit(10)
+                ->get();
+            
+            return response()->json(['data' => $reviews]);
+        } catch (\Exception $e) {
+            return response()->json(['data' => []]);
+        }
+    });
+});
+
+// =====================================================
+// MODULE SEO API (Admin functionality)
+// =====================================================
+Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () {
+    // Global SEO Settings
+    Route::get('/global', function () {
+        try {
+            $settings = Settings::getSettings('seo');
+            return response()->json($settings);
+        } catch (\Exception $e) {
+            return response()->json([]);
+        }
+    });
+    
+    Route::post('/global', function (Request $request) {
+        try {
+            $data = $request->all();
+            foreach ($data as $key => $value) {
+                if ($key !== '_token') {
+                    Settings::store($key, $value, 'seo');
+                }
+            }
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // 301 Redirects
+    Route::get('/redirects', function (Request $request) {
+        try {
+            // Check if bc_redirects table exists
+            if (!\Schema::hasTable('bc_redirects')) {
+                return response()->json(['data' => []]);
+            }
+            
+            $query = \DB::table('bc_redirects');
+            
+            if ($request->has('search') && $request->search) {
+                $query->where(function ($q) use ($request) {
+                    $q->where('old_url', 'LIKE', '%' . $request->search . '%')
+                      ->orWhere('new_url', 'LIKE', '%' . $request->search . '%');
+                });
+            }
+            
+            if ($request->has('status') && $request->status !== 'all') {
+                $query->where('is_active', $request->status === 'active' ? 1 : 0);
+            }
+            
+            $redirects = $query->orderBy('id', 'desc')->get();
+            
+            return response()->json(['data' => $redirects]);
+        } catch (\Exception $e) {
+            return response()->json(['data' => [], 'error' => $e->getMessage()]);
+        }
+    });
+    
+    Route::get('/redirects/{id}', function ($id) {
+        try {
+            $redirect = \DB::table('bc_redirects')->where('id', $id)->first();
+            return response()->json($redirect);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    Route::post('/redirects/store/{id?}', function (Request $request, $id = null) {
+        try {
+            // Create table if doesn't exist
+            if (!\Schema::hasTable('bc_redirects')) {
+                \Schema::create('bc_redirects', function ($table) {
+                    $table->id();
+                    $table->string('old_url');
+                    $table->string('new_url');
+                    $table->integer('status_code')->default(301);
+                    $table->boolean('is_active')->default(true);
+                    $table->timestamps();
+                });
+            }
+            
+            $data = [
+                'old_url' => $request->input('old_url'),
+                'new_url' => $request->input('new_url'),
+                'status_code' => $request->input('status_code', 301),
+                'is_active' => $request->input('is_active', true),
+                'updated_at' => now(),
+            ];
+            
+            if ($id) {
+                \DB::table('bc_redirects')->where('id', $id)->update($data);
+            } else {
+                $data['created_at'] = now();
+                $id = \DB::table('bc_redirects')->insertGetId($data);
+            }
+            
+            return response()->json(['success' => true, 'id' => $id]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    Route::post('/redirects/bulkEdit', function (Request $request) {
+        try {
+            $ids = $request->input('ids', []);
+            $action = $request->input('action');
+            
+            if ($action === 'delete') {
+                \DB::table('bc_redirects')->whereIn('id', $ids)->delete();
+            }
+            
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // Sitemap
+    Route::get('/sitemap', function () {
+        try {
+            $settings = Settings::getSettings('sitemap');
+            return response()->json($settings);
+        } catch (\Exception $e) {
+            return response()->json([]);
+        }
+    });
+    
+    Route::post('/sitemap', function (Request $request) {
+        try {
+            $data = $request->all();
+            foreach ($data as $key => $value) {
+                if ($key !== '_token') {
+                    Settings::store('sitemap_' . $key, $value, 'sitemap');
+                }
+            }
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    Route::post('/sitemap/generate', function () {
+        try {
+            // Generate basic sitemap
+            $sitemapContent = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+            $sitemapContent .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
+            
+            $baseUrl = config('app.url', 'https://exploreheros.com');
+            
+            // Add homepage
+            $sitemapContent .= "<url><loc>{$baseUrl}</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n";
+            
+            // Add tours
+            $tours = Tour::where('status', 'publish')->get(['slug']);
+            foreach ($tours as $tour) {
+                $sitemapContent .= "<url><loc>{$baseUrl}/tours/{$tour->slug}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n";
+            }
+            
+            // Add destinations
+            $destinations = Location::where('status', 'publish')->get(['slug']);
+            foreach ($destinations as $dest) {
+                $sitemapContent .= "<url><loc>{$baseUrl}/destinations/{$dest->slug}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n";
+            }
+            
+            // Add pages
+            $pages = \DB::table('bc_pages')->where('status', 'publish')->get(['slug']);
+            foreach ($pages as $page) {
+                $sitemapContent .= "<url><loc>{$baseUrl}/{$page->slug}</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n";
+            }
+            
+            // Add news/blog
+            $posts = \DB::table('bc_news')->where('status', 'publish')->get(['slug']);
+            foreach ($posts as $post) {
+                $sitemapContent .= "<url><loc>{$baseUrl}/blog/{$post->slug}</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>\n";
+            }
+            
+            $sitemapContent .= '</urlset>';
+            
+            // Save sitemap
+            $sitemapPath = public_path('sitemap.xml');
+            file_put_contents($sitemapPath, $sitemapContent);
+            
+            return response()->json([
+                'success' => true,
+                'url' => $baseUrl . '/sitemap.xml',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // Robots.txt
+    Route::get('/robots', function () {
+        try {
+            $robotsPath = public_path('robots.txt');
+            $content = file_exists($robotsPath) ? file_get_contents($robotsPath) : "User-agent: *\nAllow: /\n\nSitemap: " . config('app.url') . "/sitemap.xml";
+            return response()->json(['content' => $content]);
+        } catch (\Exception $e) {
+            return response()->json(['content' => '']);
+        }
+    });
+    
+    Route::post('/robots', function (Request $request) {
+        try {
+            $content = $request->input('content');
+            $robotsPath = public_path('robots.txt');
+            file_put_contents($robotsPath, $content);
+            return response()->json(['content' => $content, 'success' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     });
 });
