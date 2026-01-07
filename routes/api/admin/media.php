@@ -309,6 +309,35 @@ Route::prefix('module/media')->middleware('auth:sanctum')->group(function () {
         }
     });
     
+    // Remove files - Frontend compatibility route (uses file_ids instead of ids)
+    Route::post('/removeFiles', function (Request $request) {
+        try {
+            $ids = $request->input('file_ids', []);
+            
+            if (empty($ids)) {
+                return response()->json(['error' => 'No files selected'], 400);
+            }
+            
+            $files = MediaFile::whereIn('id', $ids)->get();
+            
+            foreach ($files as $file) {
+                // Delete physical file
+                if ($file->file_path && Storage::disk('public')->exists($file->file_path)) {
+                    Storage::disk('public')->delete($file->file_path);
+                }
+            }
+            
+            MediaFile::whereIn('id', $ids)->delete();
+            
+            return response()->json([
+                'success' => true,
+                'message' => count($ids) . ' file(s) deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
     // Get statistics
     Route::get('/statistics', function () {
         try {

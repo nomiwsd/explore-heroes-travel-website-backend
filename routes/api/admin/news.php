@@ -302,3 +302,119 @@ Route::prefix('module/news/category')->middleware('auth:sanctum')->group(functio
         }
     });
 });
+
+// =====================================================
+// NEWS TAG MANAGEMENT
+// =====================================================
+Route::prefix('module/news/tag')->middleware('auth:sanctum')->group(function () {
+    // Get all tags
+    Route::get('/', function (Request $request) {
+        try {
+            $query = \Modules\News\Models\Tag::query();
+            
+            if ($request->has('s') && $request->s) {
+                $query->where('name', 'LIKE', '%' . $request->s . '%');
+            }
+            
+            $tags = $query->orderBy('id', 'desc')->paginate($request->input('limit', 50));
+            
+            return response()->json([
+                'data' => $tags->map(function ($tag) {
+                    return [
+                        'id' => $tag->id,
+                        'name' => $tag->name,
+                        'slug' => $tag->slug,
+                        'content' => $tag->content,
+                    ];
+                }),
+                'total' => $tags->total(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // Get single tag
+    Route::get('/edit/{id}', function ($id) {
+        try {
+            $tag = \Modules\News\Models\Tag::findOrFail($id);
+            
+            return response()->json([
+                'data' => [
+                    'id' => $tag->id,
+                    'name' => $tag->name,
+                    'slug' => $tag->slug,
+                    'content' => $tag->content,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // Store/Update tag
+    Route::post('/store/{id?}', function (Request $request, $id = null) {
+        try {
+            if ($id) {
+                $tag = \Modules\News\Models\Tag::findOrFail($id);
+            } else {
+                $tag = new \Modules\News\Models\Tag();
+            }
+            
+            $tag->name = $request->input('name');
+            $tag->slug = $request->input('slug') ?: \Str::slug($request->input('name'));
+            $tag->content = $request->input('content');
+            $tag->save();
+            
+            return response()->json([
+                'success' => true,
+                'data' => ['id' => $tag->id],
+                'message' => 'Tag saved successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // Delete tag
+    Route::delete('/{id}', function ($id) {
+        try {
+            $tag = \Modules\News\Models\Tag::findOrFail($id);
+            $tag->delete();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Tag deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // Bulk edit tags
+    Route::post('/bulkEdit', function (Request $request) {
+        try {
+            $ids = $request->input('ids', []);
+            $action = $request->input('action');
+            
+            if (empty($ids)) {
+                return response()->json(['error' => 'No items selected'], 400);
+            }
+            
+            switch ($action) {
+                case 'delete':
+                    \Modules\News\Models\Tag::whereIn('id', $ids)->delete();
+                    break;
+                default:
+                    return response()->json(['error' => 'Invalid action'], 400);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => ucfirst($action) . ' completed successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+});
