@@ -5,7 +5,6 @@
     use App\BaseModel;
     use Illuminate\Http\Request;
     use Kalnoy\Nestedset\NodeTrait;
-    use Modules\Booking\Models\Bookable;
     use Modules\Media\Helpers\FileHelper;
     use Illuminate\Database\Eloquent\SoftDeletes;
     use Modules\Core\Models\SEO;

@@ -1,15 +1,13 @@
 <?php
 namespace Modules\Tour\Models;
 
+use App\BaseModel;
 use App\Currency;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
-use Modules\Booking\Models\Bookable;
-use Modules\Booking\Models\Booking;
-use Modules\Booking\Traits\CapturesService;
 use Modules\Core\Models\Terms;
 use Modules\Location\Models\Location;
 use Modules\Review\Models\Review;
@@ -21,11 +19,10 @@ use Modules\Core\Models\SEO;
 use Modules\User\Models\UserWishList;
 use Modules\Core\Models\Attributes;
 
-class Tour extends Bookable
+class Tour extends BaseModel
 {
     use Notifiable;
     use SoftDeletes;
-    use CapturesService;
 
     protected $table                              = 'bc_tours';
     public    $checkout_booking_detail_file       = 'Tour::frontend/booking/detail';
@@ -105,7 +102,6 @@ class Tour extends Bookable
         return $this->hasMany(TourLocation::class);
     }
 
-    protected $bookingClass;
     protected $tourTermClass;
     protected $tourTranslationClass;
     protected $tourMetaClass;
@@ -116,7 +112,6 @@ class Tour extends Bookable
     public function __construct(array $attributes = [])
     {
         parent::__construct($attributes);
-        $this->bookingClass = Booking::class;
         $this->tourTermClass = TourTerm::class;
         $this->tourTranslationClass = TourTranslation::class;
         $this->tourMetaClass = TourMeta::class;
