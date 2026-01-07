@@ -470,6 +470,88 @@ Route::prefix('translations')->group(function () {
     });
 });
 
+// =====================================================
+// PUBLIC REVIEWS API (no auth required - for homepage testimonials)
+// =====================================================
+Route::prefix('reviews')->group(function () {
+    // Get approved/featured reviews for homepage
+    Route::get('/', function (Request $request) {
+        try {
+            $query = \DB::table('bc_review')
+                ->where('status', 'approved');
+            
+            // Filter by featured
+            if ($request->has('featured') && $request->featured === 'featured') {
+                $query->where(function($q) {
+                    $q->where('is_featured', 1)
+                      ->orWhere('show_on_homepage', 1);
+                });
+            }
+            
+            // Filter by object model (tour, hotel, etc)
+            if ($request->has('object_model') && $request->object_model) {
+                $query->where('object_model', $request->object_model);
+            }
+            
+            $reviews = $query->orderBy('created_at', 'desc')
+                ->limit($request->per_page ?? 20)
+                ->get();
+            
+            // Transform to match frontend expectations
+            $data = $reviews->map(function ($review) {
+                return [
+                    'id' => $review->id,
+                    'object_id' => $review->object_id,
+                    'object_model' => $review->object_model ?? 'tour',
+                    'tour_id' => $review->object_id,
+                    'tour_name' => $review->tour_name ?? null,
+                    'author_id' => $review->author_id,
+                    'author_name' => $review->author_name ?? 'Anonymous',
+                    'author_email' => $review->author_email ?? null,
+                    'author_avatar' => $review->author_avatar ?? null,
+                    'author_location' => $review->author_location ?? null,
+                    'author_country' => $review->author_country ?? null,
+                    'rating' => $review->rate_number ?? $review->rating ?? 5,
+                    'title' => $review->title ?? '',
+                    'content' => $review->content ?? '',
+                    'status' => $review->status,
+                    'show_on_homepage' => $review->show_on_homepage ?? 0,
+                    'show_on_tour_page' => $review->show_on_tour_page ?? 0,
+                    'is_featured' => $review->is_featured ?? 0,
+                    'review_date' => $review->review_date ?? $review->created_at,
+                    'review_source' => $review->review_source ?? 'website',
+                    'trip_summary' => $review->trip_summary ?? null,
+                    'created_at' => $review->created_at,
+                ];
+            });
+            
+            return response()->json([
+                'data' => $data,
+                'total' => $reviews->count(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['data' => [], 'total' => 0, 'error' => $e->getMessage()]);
+        }
+    });
+    
+    // Get reviews for a specific tour/object (public)
+    Route::get('/{objectModel}/{objectId}', function ($objectModel, $objectId) {
+        try {
+            $reviews = \DB::table('bc_review')
+                ->where('object_model', $objectModel)
+                ->where('object_id', $objectId)
+                ->where('status', 'approved')
+                ->orderBy('created_at', 'desc')
+                ->limit(10)
+                ->get();
+            
+            return response()->json(['data' => $reviews]);
+        } catch (\Exception $e) {
+            return response()->json(['data' => []]);
+        }
+    });
+});
+
 // Test Routes - For Database Testing
 Route::prefix('test')->group(function () {
     Route::get('/health', [TestController::class, 'health']);
