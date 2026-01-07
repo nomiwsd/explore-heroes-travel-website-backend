@@ -22,9 +22,6 @@ use Modules\User\Events\UpdatePlanRequest;
 use Modules\User\Models\Plan;
 use Modules\User\Models\UserPlan;
 use Modules\User\Traits\HasWallet;
-use Modules\Vendor\Models\VendorPayout;
-use Modules\Vendor\Models\VendorRequest;
-use Modules\Vendor\Traits\HasMembers;
 use Modules\User\Traits\HasRoles;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -37,7 +34,6 @@ class User extends Authenticatable implements MustVerifyEmail
     use HasRoles;
     use TwoFactorAuthenticatable;
     use HasApiTokens;
-    use HasMembers;
     use HasWallet;
 
     /**
