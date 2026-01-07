@@ -9,6 +9,19 @@ class Menu extends BaseModel
     protected $table = 'core_menus';
     protected static $currentMenuItem = false;
     public $lastIndex = 0;
+    
+    protected $fillable = [
+        'name',
+        'items',
+        'status',
+        'locations',
+        'create_user',
+        'update_user',
+    ];
+    
+    protected $casts = [
+        'locations' => 'array',
+    ];
 
     public function getItemsJsonAttribute()
     {
