@@ -575,8 +575,21 @@ Route::prefix('news')->group(function () {
             
             $posts = $query->orderBy('id', 'desc')->paginate($request->per_page ?? 10);
             
-            // Transform data with images
+            // Transform data with images and author
             $data = $posts->map(function ($post) {
+                // Get author info
+                $author = null;
+                if ($post->create_user) {
+                    $user = \App\User::find($post->create_user);
+                    if ($user) {
+                        $author = [
+                            'id' => $user->id,
+                            'display_name' => $user->display_name ?? $user->name ?? 'Unknown',
+                            'avatar_url' => $user->avatar_id ? get_file_url($user->avatar_id, 'thumb') : null,
+                        ];
+                    }
+                }
+                
                 return [
                     'id' => $post->id,
                     'title' => $post->title,
@@ -588,6 +601,7 @@ Route::prefix('news')->group(function () {
                     'cat_id' => $post->cat_id,
                     'image_id' => $post->image_id,
                     'image_url' => $post->image_id ? get_file_url($post->image_id, 'full') : null,
+                    'author' => $author,
                     'created_at' => $post->created_at,
                     'updated_at' => $post->updated_at,
                 ];
@@ -617,6 +631,19 @@ Route::prefix('news')->group(function () {
                 ->get();
             
             $data = $posts->map(function ($post) {
+                // Get author info
+                $author = null;
+                if ($post->create_user) {
+                    $user = \App\User::find($post->create_user);
+                    if ($user) {
+                        $author = [
+                            'id' => $user->id,
+                            'display_name' => $user->display_name ?? $user->name ?? 'Unknown',
+                            'avatar_url' => $user->avatar_id ? get_file_url($user->avatar_id, 'thumb') : null,
+                        ];
+                    }
+                }
+                
                 return [
                     'id' => $post->id,
                     'title' => $post->title,
@@ -627,6 +654,7 @@ Route::prefix('news')->group(function () {
                     'cat_id' => $post->cat_id,
                     'image_id' => $post->image_id,
                     'image_url' => $post->image_id ? get_file_url($post->image_id, 'full') : null,
+                    'author' => $author,
                     'created_at' => $post->created_at,
                 ];
             });
@@ -678,6 +706,20 @@ Route::prefix('news')->group(function () {
                 $category = \Modules\News\Models\NewsCategory::find($post->cat_id);
             }
             
+            // Get author info
+            $author = null;
+            if ($post->create_user) {
+                $user = \App\User::find($post->create_user);
+                if ($user) {
+                    $author = [
+                        'id' => $user->id,
+                        'display_name' => $user->display_name ?? $user->name ?? 'Unknown',
+                        'avatar_url' => $user->avatar_id ? get_file_url($user->avatar_id, 'thumb') : null,
+                        'bio' => $user->bio ?? null,
+                    ];
+                }
+            }
+            
             // Get related posts
             $related = \Modules\News\Models\News::where('status', 'publish')
                 ->where('id', '!=', $post->id)
@@ -705,8 +747,12 @@ Route::prefix('news')->group(function () {
                     'content' => $post->content,
                     'excerpt' => $post->excerpt,
                     'image_url' => $post->image_id ? get_file_url($post->image_id, 'full') : null,
+                    'image_alt' => $post->image_alt ?? null,
                     'cat_id' => $post->cat_id,
                     'category' => $category,
+                    'author' => $author,
+                    'reading_time' => $post->reading_time ?? null,
+                    'publish_date' => $post->publish_date ?? null,
                     'created_at' => $post->created_at,
                     'related_posts' => $related,
                 ]
