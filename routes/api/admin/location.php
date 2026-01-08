@@ -30,13 +30,20 @@ Route::prefix('module/location')->group(function () {
             
             // Transform data
             $data = $locations->map(function ($loc) {
+                // Get image URL - ensure null if not found
+                $imageUrl = null;
+                if ($loc->image_id) {
+                    $url = get_file_url($loc->image_id, 'full');
+                    $imageUrl = $url ?: null;
+                }
+                
                 return [
                     'id' => $loc->id,
                     'name' => $loc->name,
                     'slug' => $loc->slug,
                     'content' => $loc->content,
                     'image_id' => $loc->image_id,
-                    'image_url' => $loc->image_id ? get_file_url($loc->image_id, 'full') : null,
+                    'image_url' => $imageUrl,
                     'map_lat' => $loc->map_lat,
                     'map_lng' => $loc->map_lng,
                     'map_zoom' => $loc->map_zoom,
@@ -64,6 +71,19 @@ Route::prefix('module/location')->group(function () {
         try {
             $loc = Location::findOrFail($id);
             
+            // Get image URLs - ensure null if not found
+            $imageUrl = null;
+            if ($loc->image_id) {
+                $url = get_file_url($loc->image_id, 'full');
+                $imageUrl = $url ?: null;
+            }
+            
+            $bannerImageUrl = null;
+            if ($loc->banner_image_id) {
+                $url = get_file_url($loc->banner_image_id, 'full');
+                $bannerImageUrl = $url ?: null;
+            }
+            
             return response()->json([
                 'data' => [
                     'id' => $loc->id,
@@ -71,8 +91,9 @@ Route::prefix('module/location')->group(function () {
                     'slug' => $loc->slug,
                     'content' => $loc->content,
                     'image_id' => $loc->image_id,
-                    'image_url' => $loc->image_id ? get_file_url($loc->image_id, 'full') : null,
+                    'image_url' => $imageUrl,
                     'banner_image_id' => $loc->banner_image_id ?? null,
+                    'banner_image_url' => $bannerImageUrl,
                     'map_lat' => $loc->map_lat,
                     'map_lng' => $loc->map_lng,
                     'map_zoom' => $loc->map_zoom,
