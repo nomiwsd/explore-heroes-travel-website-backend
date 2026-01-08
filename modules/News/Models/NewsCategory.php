@@ -14,6 +14,7 @@ class NewsCategory extends BaseModel
     protected $fillable = [
         'name',
         'content',
+        'image_id',
         'status',
         'parent_id'
     ];

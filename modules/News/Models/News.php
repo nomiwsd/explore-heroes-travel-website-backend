@@ -17,6 +17,7 @@ class News extends BaseModel
     protected $fillable = [
         'title',
         'content',
+        'short_desc',
         'excerpt',
         'status',
         'is_featured',

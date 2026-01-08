@@ -49,7 +49,21 @@ Route::prefix('module/news')->group(function () {
     // Get single post for editing
     Route::get('/edit/{id}', function ($id) {
         try {
-            $post = News::with(['category', 'author'])->findOrFail($id);
+            $post = News::with(['category', 'author', 'tags'])->findOrFail($id);
+            $seoMeta = $post->getSeoMeta();
+            
+            // Get tag IDs from pivot table relationship
+            $tagIds = $post->tags->pluck('id')->toArray();
+            
+            $relatedPosts = [];
+            if ($post->related_posts && is_string($post->related_posts)) {
+                $relatedPosts = json_decode($post->related_posts, true) ?: [];
+            }
+            
+            $gallery = [];
+            if ($post->gallery && is_string($post->gallery)) {
+                $gallery = json_decode($post->gallery, true) ?: [];
+            }
             
             return response()->json([
                 'data' => [
@@ -58,12 +72,24 @@ Route::prefix('module/news')->group(function () {
                     'slug' => $post->slug,
                     'content' => $post->content,
                     'short_desc' => $post->short_desc,
+                    'excerpt' => $post->excerpt,
                     'image_id' => $post->image_id,
+                    'og_image_id' => $post->og_image_id,
+                    'image_alt' => $post->image_alt,
                     'image_url' => $post->image_url ?? null,
                     'cat_id' => $post->cat_id,
+                    'category_id' => $post->cat_id, // Alias for frontend
+                    'location_id' => $post->location_id,
                     'status' => $post->status,
-                    'seo_title' => $post->seo_title,
-                    'seo_description' => $post->seo_description,
+                    'is_featured' => $post->is_featured,
+                    'author_bio' => $post->author_bio,
+                    'reading_time' => $post->reading_time,
+                    'tag_ids' => $tagIds,
+                    'related_posts' => $relatedPosts,
+                    'gallery' => $gallery,
+                    'meta_title' => $seoMeta['seo_title'] ?? null,
+                    'meta_desc' => $seoMeta['seo_desc'] ?? null,
+                    'meta_keywords' => null, // Not stored in bc_seo table
                     'category' => $post->category,
                     'author' => $post->author,
                     'created_at' => $post->created_at,
@@ -87,18 +113,55 @@ Route::prefix('module/news')->group(function () {
                     $post->create_user = auth()->id();
                 }
                 
+                // Basic fields
                 $post->title = $request->input('title');
                 $post->slug = $request->input('slug') ?: \Str::slug($request->input('title'));
                 $post->content = $request->input('content');
                 $post->short_desc = $request->input('short_desc');
-                $post->image_id = $request->input('image_id');
-                $post->cat_id = $request->input('cat_id');
-                $post->status = $request->input('status', 'publish');
-                $post->seo_title = $request->input('seo_title');
-                $post->seo_description = $request->input('seo_description');
-                $post->update_user = auth()->id();
+                $post->excerpt = $request->input('excerpt');
                 
+                // Image fields
+                $post->image_id = $request->input('image_id');
+                $post->og_image_id = $request->input('og_image_id');
+                $post->image_alt = $request->input('image_alt');
+                
+                // Category and location (map category_id to cat_id)
+                $post->cat_id = $request->input('cat_id') ?: $request->input('category_id');
+                $post->location_id = $request->input('location_id');
+                
+                // Status and featured
+                $post->status = $request->input('status', 'publish');
+                $post->is_featured = $request->input('is_featured', 0);
+                
+                // Additional fields
+                $post->author_bio = $request->input('author_bio');
+                $post->reading_time = $request->input('reading_time');
+                
+                // Array fields (stored as JSON)
+                if ($request->has('related_posts')) {
+                    $post->related_posts = json_encode($request->input('related_posts'));
+                }
+                if ($request->has('gallery')) {
+                    $post->gallery = json_encode($request->input('gallery'));
+                }
+                
+                $post->update_user = auth()->id();
                 $post->save();
+                
+                // Handle tags through pivot table (core_news_tag)
+                if ($request->has('tag_ids')) {
+                    $post->saveTag([], $request->input('tag_ids'));
+                }
+                
+                // Save SEO meta data to separate bc_seo table
+                if ($request->has('meta_title') || $request->has('meta_desc') || $request->has('meta_keywords')) {
+                    $seoRequest = new Request([
+                        'seo_title' => $request->input('meta_title'),
+                        'seo_desc' => $request->input('meta_desc'),
+                        'seo_image' => $request->input('og_image_id') ?: $request->input('image_id'),
+                    ]);
+                    $post->saveSEO($seoRequest);
+                }
                 
                 return response()->json([
                     'success' => true,
@@ -215,6 +278,7 @@ Route::prefix('module/news/category')->middleware('auth:sanctum')->group(functio
     Route::get('/edit/{id}', function ($id) {
         try {
             $category = NewsCategory::findOrFail($id);
+            $seoMeta = $category->getSeoMeta();
             
             return response()->json([
                 'data' => [
@@ -222,8 +286,11 @@ Route::prefix('module/news/category')->middleware('auth:sanctum')->group(functio
                     'name' => $category->name,
                     'slug' => $category->slug,
                     'content' => $category->content,
+                    'description' => $category->content, // Alias for frontend
                     'image_id' => $category->image_id,
                     'status' => $category->status,
+                    'meta_title' => $seoMeta['seo_title'] ?? null,
+                    'meta_desc' => $seoMeta['seo_desc'] ?? null,
                 ],
             ]);
         } catch (\Exception $e) {
@@ -242,10 +309,21 @@ Route::prefix('module/news/category')->middleware('auth:sanctum')->group(functio
             
             $category->name = $request->input('name');
             $category->slug = $request->input('slug') ?: \Str::slug($request->input('name'));
-            $category->content = $request->input('content');
+            // Frontend sends 'description', backend stores as 'content'
+            $category->content = $request->input('content') ?: $request->input('description');
             $category->image_id = $request->input('image_id');
             $category->status = $request->input('status', 'publish');
             $category->save();
+            
+            // Save SEO meta data
+            if ($request->has('meta_title') || $request->has('meta_desc')) {
+                $seoRequest = new Request([
+                    'seo_title' => $request->input('meta_title'),
+                    'seo_desc' => $request->input('meta_desc'),
+                    'seo_image' => $request->input('image_id'),
+                ]);
+                $category->saveSEO($seoRequest);
+            }
             
             return response()->json([
                 'success' => true,
