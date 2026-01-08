@@ -62,6 +62,7 @@ class Tour extends BaseModel
         'include',
         'exclude',
         'itinerary',
+        'highlight',
         'surrounding',
         'min_day_before_booking',
         'enable_fixed_date',
@@ -83,6 +84,7 @@ class Tour extends BaseModel
         'include'   => 'array',
         'exclude'   => 'array',
         'itinerary' => 'array',
+        'highlight' => 'array',
         'service_fee' => 'array',
         'surrounding' => 'array',
         'start_date'=> 'date',
@@ -100,6 +102,16 @@ class Tour extends BaseModel
     public function locations(): \Illuminate\Database\Eloquent\Relations\hasMany
     {
         return $this->hasMany(TourLocation::class);
+    }
+
+    public function location()
+    {
+        return $this->belongsTo(\Modules\Location\Models\Location::class, 'location_id');
+    }
+
+    public function category()
+    {
+        return $this->belongsTo(\Modules\Tour\Models\TourCategory::class, 'category_id');
     }
 
     protected $tourTermClass;

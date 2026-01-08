@@ -60,4 +60,8 @@ class NewsCategory extends BaseModel
     public function news(){
         return $this->hasMany(News::class,'cat_id');
     }
+
+    public function posts(){
+        return $this->hasMany(News::class,'cat_id');
+    }
 }

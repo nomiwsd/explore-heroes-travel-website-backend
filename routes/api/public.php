@@ -321,6 +321,12 @@ Route::prefix('tours')->group(function () {
                 $faqs = is_string($tour->faqs) ? json_decode($tour->faqs, true) : $tour->faqs;
             }
             
+            // Get highlights
+            $highlights = [];
+            if ($tour->highlight) {
+                $highlights = is_string($tour->highlight) ? json_decode($tour->highlight, true) : $tour->highlight;
+            }
+            
             // Get include/exclude
             $include = [];
             $exclude = [];
@@ -385,7 +391,7 @@ Route::prefix('tours')->group(function () {
                     'include' => $include,
                     'exclude' => $exclude,
                     'faqs' => $faqs,
-                    'highlights' => $tour->highlights,
+                    'highlights' => $highlights,
                     'meta_title' => $tour->meta_title ?? $tour->title,
                     'meta_description' => $tour->meta_desc ?? $tour->short_desc,
                     'related_tours' => $relatedTours->map(function ($t) {
@@ -394,8 +400,14 @@ Route::prefix('tours')->group(function () {
                             'title' => $t->title,
                             'slug' => $t->slug,
                             'price' => $t->price,
+                            'sale_price' => $t->sale_price,
                             'duration' => $t->duration,
                             'image_url' => $t->image_id ? get_file_url($t->image_id, 'full') : null,
+                            'destination' => $t->location ? [
+                                'id' => $t->location->id,
+                                'name' => $t->location->name,
+                                'slug' => $t->location->slug,
+                            ] : null,
                         ];
                     }),
                 ],
@@ -544,7 +556,7 @@ Route::prefix('news')->group(function () {
     // Get all published posts
     Route::get('/', function (Request $request) {
         try {
-            $query = \DB::table('bc_news')->where('status', 'publish');
+            $query = \Modules\News\Models\News::where('status', 'publish');
             
             // Filter by category
             if ($request->has('cat_id') && $request->cat_id) {
@@ -564,9 +576,21 @@ Route::prefix('news')->group(function () {
             $posts = $query->orderBy('id', 'desc')->paginate($request->per_page ?? 10);
             
             // Transform data with images
-            $data = collect($posts->items())->map(function ($post) {
-                $post->image_url = $post->image_id ? get_file_url($post->image_id, 'full') : null;
-                return $post;
+            $data = $posts->map(function ($post) {
+                return [
+                    'id' => $post->id,
+                    'title' => $post->title,
+                    'slug' => $post->slug,
+                    'content' => $post->content,
+                    'excerpt' => $post->excerpt,
+                    'status' => $post->status,
+                    'is_featured' => $post->is_featured,
+                    'cat_id' => $post->cat_id,
+                    'image_id' => $post->image_id,
+                    'image_url' => $post->image_id ? get_file_url($post->image_id, 'full') : null,
+                    'created_at' => $post->created_at,
+                    'updated_at' => $post->updated_at,
+                ];
             });
             
             return response()->json([
@@ -586,16 +610,25 @@ Route::prefix('news')->group(function () {
     Route::get('/featured', function (Request $request) {
         try {
             $limit = $request->get('limit', 6);
-            $posts = \DB::table('bc_news')
-                ->where('status', 'publish')
+            $posts = \Modules\News\Models\News::where('status', 'publish')
                 ->where('is_featured', 1)
                 ->orderBy('id', 'desc')
                 ->limit($limit)
                 ->get();
             
             $data = $posts->map(function ($post) {
-                $post->image_url = $post->image_id ? get_file_url($post->image_id, 'full') : null;
-                return $post;
+                return [
+                    'id' => $post->id,
+                    'title' => $post->title,
+                    'slug' => $post->slug,
+                    'content' => $post->content,
+                    'excerpt' => $post->excerpt,
+                    'is_featured' => $post->is_featured,
+                    'cat_id' => $post->cat_id,
+                    'image_id' => $post->image_id,
+                    'image_url' => $post->image_id ? get_file_url($post->image_id, 'full') : null,
+                    'created_at' => $post->created_at,
+                ];
             });
             
             return response()->json(['data' => $data]);
@@ -607,8 +640,7 @@ Route::prefix('news')->group(function () {
     // Get public categories
     Route::get('/categories', function () {
         try {
-            $categories = \DB::table('bc_news_category')
-                ->where('status', 'publish')
+            $categories = \Modules\News\Models\NewsCategory::where('status', 'publish')
                 ->orderBy('name')
                 ->get();
             return response()->json(['data' => $categories]);
@@ -632,8 +664,7 @@ Route::prefix('news')->group(function () {
     // Get single post by slug
     Route::get('/{slug}', function ($slug) {
         try {
-            $post = \DB::table('bc_news')
-                ->where('slug', $slug)
+            $post = \Modules\News\Models\News::where('slug', $slug)
                 ->where('status', 'publish')
                 ->first();
             
@@ -641,16 +672,14 @@ Route::prefix('news')->group(function () {
                 return response()->json(['error' => 'Post not found'], 404);
             }
             
-            $post->image_url = $post->image_id ? get_file_url($post->image_id, 'full') : null;
-            
             // Get category
+            $category = null;
             if ($post->cat_id) {
-                $post->category = \DB::table('bc_news_category')->where('id', $post->cat_id)->first();
+                $category = \Modules\News\Models\NewsCategory::find($post->cat_id);
             }
             
             // Get related posts
-            $related = \DB::table('bc_news')
-                ->where('status', 'publish')
+            $related = \Modules\News\Models\News::where('status', 'publish')
                 ->where('id', '!=', $post->id)
                 ->when($post->cat_id, function ($q) use ($post) {
                     return $q->where('cat_id', $post->cat_id);
@@ -659,13 +688,29 @@ Route::prefix('news')->group(function () {
                 ->limit(4)
                 ->get()
                 ->map(function ($p) {
-                    $p->image_url = $p->image_id ? get_file_url($p->image_id, 'full') : null;
-                    return $p;
+                    return [
+                        'id' => $p->id,
+                        'title' => $p->title,
+                        'slug' => $p->slug,
+                        'excerpt' => $p->excerpt,
+                        'image_url' => $p->image_id ? get_file_url($p->image_id, 'full') : null,
+                    ];
                 });
             
-            $post->related_posts = $related;
-            
-            return response()->json(['data' => $post]);
+            return response()->json([
+                'data' => [
+                    'id' => $post->id,
+                    'title' => $post->title,
+                    'slug' => $post->slug,
+                    'content' => $post->content,
+                    'excerpt' => $post->excerpt,
+                    'image_url' => $post->image_id ? get_file_url($post->image_id, 'full') : null,
+                    'cat_id' => $post->cat_id,
+                    'category' => $category,
+                    'created_at' => $post->created_at,
+                    'related_posts' => $related,
+                ]
+            ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }

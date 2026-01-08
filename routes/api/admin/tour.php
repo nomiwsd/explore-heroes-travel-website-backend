@@ -14,7 +14,7 @@ Route::prefix('module/tour')->group(function () {
     // Get all tours (for admin listing)
     Route::get('/', function (Request $request) {
         try {
-            $query = Tour::with(['location', 'category_tour']);
+            $query = Tour::query();
             
             // Search filter
             if ($request->has('s') && $request->s) {

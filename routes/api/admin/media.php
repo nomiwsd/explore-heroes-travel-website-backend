@@ -197,11 +197,14 @@ Route::prefix('module/media')->middleware('auth:sanctum')->group(function () {
                 $path = $file->storeAs($folder, $filename, 'public');
                 
                 // Get image dimensions if applicable
-                $dimensions = null;
+                // Get image dimensions
+                $width = null;
+                $height = null;
                 if (str_starts_with($mimeType, 'image/')) {
                     $imageSize = getimagesize($file->getRealPath());
                     if ($imageSize) {
-                        $dimensions = $imageSize[0] . 'x' . $imageSize[1];
+                        $width = $imageSize[0];
+                        $height = $imageSize[1];
                     }
                 }
                 
@@ -212,7 +215,8 @@ Route::prefix('module/media')->middleware('auth:sanctum')->group(function () {
                 $mediaFile->file_type = $mimeType;
                 $mediaFile->file_extension = $file->getClientOriginalExtension();
                 $mediaFile->file_size = $file->getSize();
-                $mediaFile->dimensions = $dimensions;
+                $mediaFile->file_width = $width;
+                $mediaFile->file_height = $height;
                 $mediaFile->create_user = auth()->id();
                 $mediaFile->save();
                 
