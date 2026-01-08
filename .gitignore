@@ -34,3 +34,5 @@ public/themes/*/dist
 /storage/debugbar/
 /database/backups/
 /bootstrap/cache/*.php
+README-clean-broken-images.md
+README-remove-images.md
