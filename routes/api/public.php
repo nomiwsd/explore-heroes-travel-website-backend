@@ -311,10 +311,14 @@ Route::prefix('tours')->group(function () {
                         'price' => $tour->price,
                         'sale_price' => $tour->sale_price,
                         'duration' => $tour->duration,
-                        'duration_nights' => $tour->duration ? $tour->duration - 1 : null,
+                        'nights' => $tour->nights, // Updated to use nights column
+                        'duration_nights' => $tour->nights, // Legacy support
                         'image_url' => $tour->image_id ? get_file_url($tour->image_id, 'full') : null,
                         'is_featured' => $tour->is_featured,
                         'tour_type' => $tour->tour_type,
+                        'pricing_type' => $tour->pricing_type,
+                        'min_people' => $tour->min_people,
+                        'max_people' => $tour->max_people,
                         'destination' => $tour->location ? [
                             'id' => $tour->location->id,
                             'name' => $tour->location->name,
@@ -359,9 +363,11 @@ Route::prefix('tours')->group(function () {
                 $faqs = is_string($tour->faqs) ? json_decode($tour->faqs, true) : $tour->faqs;
             }
             
-            // Get highlights
+            // Get highlights (Prioritize new column)
             $highlights = [];
-            if ($tour->highlight) {
+            if ($tour->highlights && count($tour->highlights) > 0) {
+                $highlights = $tour->highlights;
+            } elseif ($tour->highlight) {
                 $highlights = is_string($tour->highlight) ? json_decode($tour->highlight, true) : $tour->highlight;
             }
             
@@ -375,18 +381,35 @@ Route::prefix('tours')->group(function () {
                 $exclude = is_string($tour->exclude) ? json_decode($tour->exclude, true) : $tour->exclude;
             }
             
-            // Get gallery images
+            // Get gallery images (Robust ID/Path handling)
             $gallery = [];
             if ($tour->gallery) {
                 $galleryIds = is_string($tour->gallery) ? json_decode($tour->gallery, true) : $tour->gallery;
                 if (is_array($galleryIds)) {
-                    $gallery = array_map(function($id) {
-                        return get_file_url($id, 'full');
+                    $gallery = array_map(function($item) {
+                        if (is_numeric($item)) {
+                            return get_file_url($item, 'full');
+                        }
+                        return $item; // Assume it is already a URL or path
                     }, $galleryIds);
                 }
             }
+
+            // Hero Slider
+            $hero_slider = [];
+            if ($tour->hero_slider) {
+                 $heroIds = is_string($tour->hero_slider) ? json_decode($tour->hero_slider, true) : $tour->hero_slider;
+                 if (is_array($heroIds)) {
+                     $hero_slider = array_map(function($item) {
+                         if (is_numeric($item)) {
+                             return get_file_url($item, 'full');
+                         }
+                         return $item; // Assume it is already a URL or path
+                     }, $heroIds);
+                 }
+            }
             
-            // Get related tours
+            // Get related tours (Updated with new fields)
             $relatedTours = Tour::where('status', 'publish')
                 ->where('id', '!=', $tour->id)
                 ->where(function($q) use ($tour) {
@@ -406,14 +429,18 @@ Route::prefix('tours')->group(function () {
                     'price' => $tour->price,
                     'sale_price' => $tour->sale_price,
                     'duration' => $tour->duration,
-                    'duration_nights' => $tour->duration ? $tour->duration - 1 : null,
+                    'nights' => $tour->nights, // Updated
+                    'duration_nights' => $tour->nights,
                     'group_size' => $tour->max_people,
+                    'min_people' => $tour->min_people,
                     'tour_type' => $tour->tour_type,
+                    'pricing_type' => $tour->pricing_type,
                     'image_url' => $tour->image_id ? get_file_url($tour->image_id, 'full') : null,
                     'banner_url' => $tour->banner_image_id ? get_file_url($tour->banner_image_id, 'full') : null,
                     'video_url' => $tour->video,
                     'map_lat' => $tour->map_lat,
                     'map_lng' => $tour->map_lng,
+                    'map_embed' => $tour->map_embed,
                     'is_featured' => $tour->is_featured,
                     'destination' => $tour->location ? [
                         'id' => $tour->location->id,
@@ -423,15 +450,51 @@ Route::prefix('tours')->group(function () {
                     'category' => $tour->category ? [
                         'id' => $tour->category->id,
                         'name' => $tour->category->name,
+                        'slug' => $tour->category->slug,
                     ] : null,
                     'gallery' => $gallery,
+                    'hero_slider' => $hero_slider,
                     'itinerary' => $itinerary,
-                    'include' => $include,
-                    'exclude' => $exclude,
-                    'faqs' => $faqs,
+                    'include' => $include, // inclusions (structured)
+                    'exclude' => $exclude, // exclusions (structured)
+                    'inclusions' => $tour->inclusions ?? $include, // arrays
+                    'exclusions' => $tour->exclusions ?? $exclude, // arrays
                     'highlights' => $highlights,
-                    'meta_title' => $tour->meta_title ?? $tour->title,
-                    'meta_description' => $tour->meta_desc ?? $tour->short_desc,
+                    'faqs' => $faqs,
+                    'tour_themes' => $tour->tour_themes,
+                    'suitable_for' => $tour->suitable_for,
+                    'cities_covered' => $tour->cities_covered,
+                    'summary_inclusions' => $tour->summary_inclusions,
+                    'availability_dates' => $tour->availability_dates,
+                    'conditions' => $tour->conditions,
+                    'cancellation_policy' => $tour->cancellation_policy,
+                    'child_policy' => $tour->child_policy,
+                    'payment_terms' => $tour->payment_terms,
+                    'meta_title' => $tour->seo_title,
+                    'meta_description' => $tour->seo_desc,
+                    'og_title' => $tour->og_title,
+                    'og_description' => $tour->og_description,
+                    'og_image' => $tour->og_image,
+                    'twitter_title' => $tour->twitter_title,
+                    'twitter_description' => $tour->twitter_description,
+                    'twitter_image' => $tour->twitter_image,
+                    'twitter_card' => $tour->twitter_card,
+                    // Missing fields added
+                    'address' => $tour->address,
+                    'map_zoom' => $tour->map_zoom,
+                    'map_image_url' => $tour->map_image_id ? get_file_url($tour->map_image_id, 'full') : null,
+                    'start_date' => $tour->start_date,
+                    'end_date' => $tour->end_date,
+                    'enable_fixed_date' => $tour->enable_fixed_date,
+                    'min_day_before_booking' => $tour->min_day_before_booking,
+                    'review_score' => $tour->review_score,
+                    'author' => $tour->author ? [
+                        'id' => $tour->author->id,
+                        'name' => $tour->author->getDisplayName() ?? $tour->author->name ?? $tour->author->first_name,
+                         'avatar_url' => $tour->author->getAvatarUrl() ?? null,
+                    ] : null,
+                    'created_at' => $tour->created_at,
+                    'updated_at' => $tour->updated_at,
                     'related_tours' => $relatedTours->map(function ($t) {
                         return [
                             'id' => $t->id,
@@ -440,6 +503,8 @@ Route::prefix('tours')->group(function () {
                             'price' => $t->price,
                             'sale_price' => $t->sale_price,
                             'duration' => $t->duration,
+                            'nights' => $t->nights,
+                            'tour_type' => $t->tour_type,
                             'image_url' => $t->image_id ? get_file_url($t->image_id, 'full') : null,
                             'destination' => $t->location ? [
                                 'id' => $t->location->id,

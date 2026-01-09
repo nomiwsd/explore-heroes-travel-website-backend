@@ -54,8 +54,20 @@ class Tour extends BaseModel
         'sale_price',
         //Tour type
         'duration',
+        'duration_type',
+        'nights',
+        'tour_type',
         'max_people',
         'min_people',
+        'pricing_type',
+        'group_price',
+        'child_price',
+        //New fields - Basic Info
+        'suitable_for',
+        'tour_themes',
+        'cities_covered',
+        'summary_inclusions',
+        'tour_expert_id',
         //Extra Info
         'faqs',
         'status',
@@ -64,12 +76,41 @@ class Tour extends BaseModel
         'itinerary',
         'highlight',
         'surrounding',
+        // Alternative field names from frontend
+        'inclusions',
+        'exclusions',
+        'highlights',
+        //Policies
+        'conditions',
+        'cancellation_policy',
+        'child_policy',
+        'payment_terms',
+        //Media
+        'hero_slider',
+        'map_embed',
+        //Dates & Availability
         'min_day_before_booking',
         'enable_fixed_date',
         'start_date',
         'end_date',
         'last_booking_date',
         'date_select_type',
+        'availability_dates',
+        'related_tour_ids',
+        //SEO fields
+        'seo_title',
+        'seo_desc',
+        'seo_image',
+        'seo_share',
+        //OG (Open Graph) fields
+        'og_title',
+        'og_description',
+        'og_image',
+        //Twitter Card fields
+        'twitter_card',
+        'twitter_title',
+        'twitter_description',
+        'twitter_image',
     ];
     protected $slugField                          = 'slug';
     protected $slugFromField                      = 'title';
@@ -87,6 +128,22 @@ class Tour extends BaseModel
         'highlight' => 'array',
         'service_fee' => 'array',
         'surrounding' => 'array',
+        // New JSON fields
+        'tour_themes' => 'array',
+        'suitable_for' => 'array',
+        'cities_covered' => 'array',
+        'summary_inclusions' => 'array',
+        'hero_slider' => 'array',
+        'availability_dates' => 'array',
+        'related_tour_ids' => 'array',
+        'inclusions' => 'array',
+        'exclusions' => 'array',
+        'highlights' => 'array',
+        'suitable_for' => 'array',
+        'tour_themes' => 'array',
+        'cities_covered' => 'array',
+        'summary_inclusions' => 'array',
+        'hero_slider' => 'array',
         'start_date'=> 'date',
         'end_date'=> 'date',
         'last_booking_date'   => 'date',
@@ -1244,6 +1301,11 @@ class Tour extends BaseModel
         if(!empty($this->enable_fixed_date) and $this->last_booking_date >= Carbon::today()) return    true;
         return false;
 
+    }
+
+    public function author()
+    {
+        return $this->belongsTo(\App\User::class, 'create_user');
     }
 
 }

@@ -55,6 +55,10 @@ Route::prefix('module/tour')->group(function () {
                     'price' => $tour->price,
                     'sale_price' => $tour->sale_price,
                     'duration' => $tour->duration,
+                    'nights' => $tour->nights, // Added
+                    'tour_type' => $tour->tour_type, // Added
+                    'gallery_count' => is_array($tour->gallery) ? count($tour->gallery) : 0, // Added
+                    'itinerary_count' => is_array($tour->itinerary) ? count($tour->itinerary) : 0, // Added
                     'status' => $tour->status,
                     'is_featured' => $tour->is_featured,
                     'category_id' => $tour->category_id,
@@ -99,8 +103,19 @@ Route::prefix('module/tour')->group(function () {
                     'price' => $tour->price,
                     'sale_price' => $tour->sale_price,
                     'duration' => $tour->duration,
+                    'duration_type' => $tour->duration_type ?? 'days',
+                    'nights' => $tour->nights,
+                    'tour_type' => $tour->tour_type,
                     'max_people' => $tour->max_people,
                     'min_people' => $tour->min_people,
+                    'pricing_type' => $tour->pricing_type ?? 'per_person',
+                    'group_price' => $tour->group_price,
+                    'child_price' => $tour->child_price,
+                    'suitable_for' => $tour->suitable_for,
+                    'tour_themes' => $tour->tour_themes,
+                    'cities_covered' => $tour->cities_covered,
+                    'summary_inclusions' => $tour->summary_inclusions,
+                    'tour_expert_id' => $tour->tour_expert_id,
                     'category_id' => $tour->category_id,
                     'category_name' => $tour->category_tour ? $tour->category_tour->name : null,
                     'location_id' => $tour->location_id,
@@ -109,20 +124,51 @@ Route::prefix('module/tour')->group(function () {
                     'map_lat' => $tour->map_lat,
                     'map_lng' => $tour->map_lng,
                     'map_zoom' => $tour->map_zoom,
+                    'map_image_id' => $tour->map_image_id,
+                    'map_image_url' => $tour->map_image_id ? get_file_url($tour->map_image_id, 'full') : null,
+                    'map_embed' => $tour->map_embed,
                     'status' => $tour->status,
                     'is_featured' => $tour->is_featured,
                     'faqs' => $tour->faqs,
                     'include' => $tour->include,
                     'exclude' => $tour->exclude,
+                    'inclusions' => $tour->inclusions, // Added
+                    'exclusions' => $tour->exclusions, // Added
                     'itinerary' => $tour->itinerary,
+                    'highlight' => $tour->highlight,
+                    'highlights' => $tour->highlights, // Added
                     'surrounding' => $tour->surrounding,
+                    'conditions' => $tour->conditions,
+                    'cancellation_policy' => $tour->cancellation_policy,
+                    'child_policy' => $tour->child_policy,
+                    'payment_terms' => $tour->payment_terms,
+                    'hero_slider' => $tour->hero_slider,
                     'min_day_before_booking' => $tour->min_day_before_booking,
                     'enable_fixed_date' => $tour->enable_fixed_date,
                     'start_date' => $tour->start_date,
                     'end_date' => $tour->end_date,
                     'last_booking_date' => $tour->last_booking_date,
+                    'availability_dates' => $tour->availability_dates,
+                    'related_tour_ids' => $tour->related_tour_ids,
+                    // SEO fields
+                    'seo_title' => $tour->seo_title,
+                    'seo_desc' => $tour->seo_desc,
+                    'seo_image' => $tour->seo_image,
+                    // OG fields
+                    'og_title' => $tour->og_title,
+                    'og_description' => $tour->og_description,
+                    'og_image' => $tour->og_image,
+                    // Twitter fields
+                    'twitter_card' => $tour->twitter_card,
+                    'twitter_title' => $tour->twitter_title,
+                    'twitter_description' => $tour->twitter_description,
+                    'twitter_image' => $tour->twitter_image,
                     'created_at' => $tour->created_at,
                     'updated_at' => $tour->updated_at,
+                    'author' => $tour->author ? [
+                        'id' => $tour->author->id,
+                        'name' => $tour->author->getDisplayName() ?? $tour->author->name ?? $tour->author->first_name,
+                    ] : null,
                 ],
             ]);
         } catch (\Exception $e) {
@@ -141,12 +187,20 @@ Route::prefix('module/tour')->group(function () {
             
             $tour->fill($request->only([
                 'title', 'content', 'short_desc', 'image_id', 'banner_image_id',
-                'gallery', 'video', 'price', 'sale_price', 'duration',
-                'max_people', 'min_people', 'category_id', 'location_id',
-                'address', 'map_lat', 'map_lng', 'map_zoom', 'status',
-                'is_featured', 'faqs', 'include', 'exclude', 'itinerary',
-                'surrounding', 'min_day_before_booking', 'enable_fixed_date',
-                'start_date', 'end_date', 'last_booking_date'
+                'gallery', 'video', 'price', 'sale_price', 'duration', 'nights',
+                'tour_type', 'max_people', 'min_people', 'category_id', 'location_id',
+                'address', 'map_lat', 'map_lng', 'map_zoom', 'map_image_id', 'status',
+                'is_featured', 'faqs', 'include', 'exclude', 'itinerary', 'highlight',
+                'surrounding', 'suitable_for', 'tour_themes', 'cities_covered',
+                'summary_inclusions', 'tour_expert_id', 'conditions', 'cancellation_policy',
+                'child_policy', 'payment_terms', 'hero_slider', 'map_embed',
+                'min_day_before_booking', 'enable_fixed_date',
+                'start_date', 'end_date', 'last_booking_date',
+                'duration_type', 'pricing_type', 'group_price', 'child_price',
+                'seo_title', 'seo_desc', 'seo_image', 'seo_share',
+                'og_title', 'og_description', 'og_image',
+                'twitter_card', 'twitter_title', 'twitter_description', 'twitter_image',
+                'availability_dates', 'related_tour_ids', 'inclusions', 'exclusions', 'highlights'
             ]));
             
             $tour->create_user = $request->user()->id ?? 1;
@@ -255,6 +309,120 @@ Route::middleware('auth:sanctum')->post('/module/tour/bulkEdit', function (Reque
             'success' => true,
             'message' => ucfirst($action) . ' completed successfully',
         ]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
+// ========== TOUR THEMES (Travel Styles) MANAGEMENT ==========
+
+// Get all tour themes for admin
+Route::middleware('auth:sanctum')->get('/module/tour/themes', function () {
+    try {
+        // Get or create the travel-styles attribute
+        $travelStylesAttr = \DB::table('bc_attrs')
+            ->where('service', 'tour')
+            ->where('slug', 'travel-styles')
+            ->first();
+        
+        if (!$travelStylesAttr) {
+            // Create the attribute if it doesn't exist
+            $attrId = \DB::table('bc_attrs')->insertGetId([
+                'name' => 'Travel Styles',
+                'slug' => 'travel-styles',
+                'service' => 'tour',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } else {
+            $attrId = $travelStylesAttr->id;
+        }
+        
+        $themes = \DB::table('bc_terms')
+            ->where('attr_id', $attrId)
+            ->whereNull('deleted_at')
+            ->select('id', 'name', 'slug', 'icon', 'image_id', 'attr_id', 'created_at')
+            ->orderBy('name')
+            ->get();
+        
+        return response()->json([
+            'data' => $themes,
+            'attr_id' => $attrId,
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
+// Store/Update tour theme
+Route::middleware('auth:sanctum')->post('/module/tour/themes/store/{id?}', function (Request $request, $id = null) {
+    try {
+        // Get the attr_id
+        $travelStylesAttr = \DB::table('bc_attrs')
+            ->where('service', 'tour')
+            ->where('slug', 'travel-styles')
+            ->first();
+        
+        if (!$travelStylesAttr) {
+            $attrId = \DB::table('bc_attrs')->insertGetId([
+                'name' => 'Travel Styles',
+                'slug' => 'travel-styles',
+                'service' => 'tour',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } else {
+            $attrId = $travelStylesAttr->id;
+        }
+        
+        $data = [
+            'name' => $request->input('name'),
+            'slug' => $request->input('slug') ?: \Str::slug($request->input('name')),
+            'icon' => $request->input('icon'),
+            'image_id' => $request->input('image_id'),
+            'attr_id' => $attrId,
+            'updated_at' => now(),
+        ];
+        
+        if ($id) {
+            \DB::table('bc_terms')->where('id', $id)->update($data);
+            $themeId = $id;
+        } else {
+            $data['created_at'] = now();
+            $themeId = \DB::table('bc_terms')->insertGetId($data);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'data' => ['id' => $themeId],
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
+// Delete tour theme
+Route::middleware('auth:sanctum')->delete('/module/tour/themes/{id}', function ($id) {
+    try {
+        \DB::table('bc_terms')->where('id', $id)->update(['deleted_at' => now()]);
+        return response()->json(['success' => true]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
+// ========== TOUR EXPERTS (Users) ==========
+
+// Get tour experts for dropdown
+Route::middleware('auth:sanctum')->get('/module/tour/experts', function () {
+    try {
+        $users = \DB::table('users')
+            ->whereNull('deleted_at')
+            ->select('id', 'name', 'email')
+            ->orderBy('name')
+            ->get();
+        
+        return response()->json(['data' => $users]);
     } catch (\Exception $e) {
         return response()->json(['error' => $e->getMessage()], 500);
     }
