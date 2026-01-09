@@ -461,7 +461,10 @@ Route::prefix('tours')->group(function () {
                     'exclusions' => $tour->exclusions ?? $exclude, // arrays
                     'highlights' => $highlights,
                     'faqs' => $faqs,
-                    'tour_themes' => $tour->tour_themes,
+                    'tour_themes' => collect($tour->tour_themes ?? [])->map(function($id) {
+                        $term = \DB::table('bc_terms')->where('id', $id)->first();
+                        return $term ? ['id' => $term->id, 'name' => $term->name, 'icon' => $term->icon] : ['id' => $id, 'name' => "Theme $id"];
+                    })->toArray(),
                     'suitable_for' => $tour->suitable_for,
                     'cities_covered' => $tour->cities_covered,
                     'summary_inclusions' => $tour->summary_inclusions,
