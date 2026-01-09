@@ -128,6 +128,7 @@ class Tour extends BaseModel
         'highlight' => 'array',
         'service_fee' => 'array',
         'surrounding' => 'array',
+        'gallery' => 'array', // Added - was missing causing Array to string conversion
         // New JSON fields
         'tour_themes' => 'array',
         'suitable_for' => 'array',
@@ -139,11 +140,6 @@ class Tour extends BaseModel
         'inclusions' => 'array',
         'exclusions' => 'array',
         'highlights' => 'array',
-        'suitable_for' => 'array',
-        'tour_themes' => 'array',
-        'cities_covered' => 'array',
-        'summary_inclusions' => 'array',
-        'hero_slider' => 'array',
         'start_date'=> 'date',
         'end_date'=> 'date',
         'last_booking_date'   => 'date',
