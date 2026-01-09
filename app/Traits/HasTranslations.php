@@ -23,9 +23,17 @@ trait HasTranslations
      */
     public function saveTranslation($locale = false,$saveSEO = false){
         if(is_enable_multi_lang()){
-            $translation = $this->translate($locale);
-            $translation->fillByAttr($translation->fillable, request()->input());
-            $translation->save();
+            $class = $this->getTranslationModelName();
+            
+            // Use updateOrCreate to avoid duplicate entry errors
+            $translation = $class::updateOrCreate(
+                [
+                    'origin_id' => $this->getKey(),
+                    'locale' => $locale ?: app()->getLocale(),
+                ],
+                collect(request()->input())->only((new $class)->getFillable())->toArray()
+            );
+            
             if($saveSEO){
                 $translation->saveSEO(request(),$locale);
             }
