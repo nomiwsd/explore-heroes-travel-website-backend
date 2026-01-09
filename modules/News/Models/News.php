@@ -31,6 +31,9 @@ class News extends BaseModel
         'author_id',
         'author_bio',
         'reading_time',
+        'meta_title',
+        'meta_desc',
+        'meta_keywords',
     ];
     protected $slugField = 'slug';
     protected $slugFromField = 'title';

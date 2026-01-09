@@ -85,6 +85,14 @@ class TagController extends AdminController
         $res = $row->saveOriginOrTranslation($request->input('lang'));
 
         if ($res) {
+            if ($request->wantsJson() || $request->expectsJson() || $request->is('api/*')) {
+                 return response()->json([
+                    'success' => true,
+                    'message' => $id > 0 ? __('Tag updated') : __('Tag Created'),
+                    'data' => $row
+                ]);
+            }
+
             if($id > 0 ){
                 return back()->with('success',  __('Tag updated') );
             }else{

@@ -64,6 +64,35 @@ Route::get('/docs', function () {
     ], 200);
 });
 
+// Serve static files from uploads directory
+// This is needed because the fallback route would otherwise catch these requests
+// Files can be in public/uploads OR storage/app/public/uploads depending on config
+Route::get('/uploads/{path}', function ($path) {
+    // First try public/uploads (as per 'uploads' disk config)
+    $filePath = public_path('uploads/' . $path);
+    
+    // If not found, try storage/app/public/uploads (where files are actually being saved)
+    if (!file_exists($filePath)) {
+        $filePath = storage_path('app/public/uploads/' . $path);
+    }
+    
+    // If still not found, return 404
+    if (!file_exists($filePath)) {
+        return response()->json(['error' => 'File not found', 'looked_in' => [
+            public_path('uploads/' . $path),
+            storage_path('app/public/uploads/' . $path)
+        ]], 404);
+    }
+    
+    // Get mime type
+    $mimeType = mime_content_type($filePath);
+    
+    return response()->file($filePath, [
+        'Content-Type' => $mimeType,
+        'Cache-Control' => 'public, max-age=31536000',
+    ]);
+})->where('path', '.*');
+
 // Fallback for undefined routes
 Route::fallback(function () {
     return response()->json([

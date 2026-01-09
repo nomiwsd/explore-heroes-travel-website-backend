@@ -585,11 +585,28 @@ Route::prefix('news')->group(function () {
                         $author = [
                             'id' => $user->id,
                             'display_name' => $user->display_name ?? $user->name ?? 'Unknown',
-                            'avatar_url' => $user->avatar_id ? get_file_url($user->avatar_id, 'thumb') : null,
+                            'avatar_url' => null,
                         ];
+                        if ($user->avatar_id) {
+                            $media = \Modules\Media\Models\MediaFile::find($user->avatar_id);
+                            if ($media) {
+                                $author['avatar_url'] = '/uploads/' . ltrim($media->file_path, '/');
+                                $author['avatar_url'] = str_replace('/uploads/uploads/', '/uploads/', $author['avatar_url']);
+                            }
+                        }
                     }
                 }
                 
+                // Clean image URL (return relative path for frontend robustness)
+                $imageUrl = null;
+                if ($post->image_id) {
+                    $media = \Modules\Media\Models\MediaFile::find($post->image_id);
+                    if ($media) {
+                        $imageUrl = '/uploads/' . ltrim($media->file_path, '/');
+                        $imageUrl = str_replace('/uploads/uploads/', '/uploads/', $imageUrl);
+                    }
+                }
+
                 return [
                     'id' => $post->id,
                     'title' => $post->title,
@@ -600,7 +617,7 @@ Route::prefix('news')->group(function () {
                     'is_featured' => $post->is_featured,
                     'cat_id' => $post->cat_id,
                     'image_id' => $post->image_id,
-                    'image_url' => $post->image_id ? get_file_url($post->image_id, 'full') : null,
+                    'image_url' => $imageUrl,
                     'author' => $author,
                     'created_at' => $post->created_at,
                     'updated_at' => $post->updated_at,
@@ -639,11 +656,28 @@ Route::prefix('news')->group(function () {
                         $author = [
                             'id' => $user->id,
                             'display_name' => $user->display_name ?? $user->name ?? 'Unknown',
-                            'avatar_url' => $user->avatar_id ? get_file_url($user->avatar_id, 'thumb') : null,
+                            'avatar_url' => null,
                         ];
+                        if ($user->avatar_id) {
+                            $media = \Modules\Media\Models\MediaFile::find($user->avatar_id);
+                            if ($media) {
+                                $author['avatar_url'] = '/uploads/' . ltrim($media->file_path, '/');
+                                $author['avatar_url'] = str_replace('/uploads/uploads/', '/uploads/', $author['avatar_url']);
+                            }
+                        }
                     }
                 }
                 
+                // Clean image URL (return relative path for frontend robustness)
+                $imageUrl = null;
+                if ($post->image_id) {
+                    $media = \Modules\Media\Models\MediaFile::find($post->image_id);
+                    if ($media) {
+                        $imageUrl = '/uploads/' . ltrim($media->file_path, '/');
+                        $imageUrl = str_replace('/uploads/uploads/', '/uploads/', $imageUrl);
+                    }
+                }
+
                 return [
                     'id' => $post->id,
                     'title' => $post->title,
@@ -653,7 +687,7 @@ Route::prefix('news')->group(function () {
                     'is_featured' => $post->is_featured,
                     'cat_id' => $post->cat_id,
                     'image_id' => $post->image_id,
-                    'image_url' => $post->image_id ? get_file_url($post->image_id, 'full') : null,
+                    'image_url' => $imageUrl,
                     'author' => $author,
                     'created_at' => $post->created_at,
                 ];
@@ -694,6 +728,7 @@ Route::prefix('news')->group(function () {
         try {
             $post = \Modules\News\Models\News::where('slug', $slug)
                 ->where('status', 'publish')
+                ->with(['location']) // Eager load location
                 ->first();
             
             if (!$post) {
@@ -714,11 +749,27 @@ Route::prefix('news')->group(function () {
                     $author = [
                         'id' => $user->id,
                         'display_name' => $user->display_name ?? $user->name ?? 'Unknown',
-                        'avatar_url' => $user->avatar_id ? get_file_url($user->avatar_id, 'thumb') : null,
+                        'avatar_url' => null,
                         'bio' => $user->bio ?? null,
                     ];
+                    if ($user->avatar_id) {
+                        $media = \Modules\Media\Models\MediaFile::find($user->avatar_id);
+                        if ($media) {
+                            $author['avatar_url'] = '/uploads/' . ltrim($media->file_path, '/');
+                            $author['avatar_url'] = str_replace('/uploads/uploads/', '/uploads/', $author['avatar_url']);
+                        }
+                    }
                 }
             }
+            
+            // Clean image URL helper (return relative path for frontend robustness)
+            $getImageUrl = function($imageId) {
+                if (!$imageId) return null;
+                $media = \Modules\Media\Models\MediaFile::find($imageId);
+                if (!$media) return null;
+                $path = '/uploads/' . ltrim($media->file_path, '/');
+                return str_replace('/uploads/uploads/', '/uploads/', $path);
+            };
             
             // Get related posts
             $related = \Modules\News\Models\News::where('status', 'publish')
@@ -729,13 +780,15 @@ Route::prefix('news')->group(function () {
                 ->orderBy('id', 'desc')
                 ->limit(4)
                 ->get()
-                ->map(function ($p) {
+                ->map(function ($p) use ($getImageUrl) {
                     return [
                         'id' => $p->id,
                         'title' => $p->title,
                         'slug' => $p->slug,
                         'excerpt' => $p->excerpt,
-                        'image_url' => $p->image_id ? get_file_url($p->image_id, 'full') : null,
+                        'image_url' => $getImageUrl($p->image_id),
+                        'created_at' => $p->created_at,
+                        'publish_date' => $p->created_at ? $p->created_at->format('Y-m-d') : null,
                     ];
                 });
             
@@ -746,13 +799,18 @@ Route::prefix('news')->group(function () {
                     'slug' => $post->slug,
                     'content' => $post->content,
                     'excerpt' => $post->excerpt,
-                    'image_url' => $post->image_id ? get_file_url($post->image_id, 'full') : null,
+                    'image_url' => $getImageUrl($post->image_id),
                     'image_alt' => $post->image_alt ?? null,
                     'cat_id' => $post->cat_id,
                     'category' => $category,
+                    'location' => $post->location ? [
+                        'id' => $post->location->id,
+                        'name' => $post->location->name,
+                        'slug' => $post->location->slug,
+                    ] : null,
                     'author' => $author,
                     'reading_time' => $post->reading_time ?? null,
-                    'publish_date' => $post->publish_date ?? null,
+                    'publish_date' => $post->created_at ? $post->created_at->format('Y-m-d') : null,
                     'created_at' => $post->created_at,
                     'related_posts' => $related,
                 ]

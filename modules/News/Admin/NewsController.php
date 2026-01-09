@@ -98,10 +98,49 @@ class NewsController extends AdminController
 
         $translation = $row->translate($request->query('lang',get_main_lang()));
 
-        // Return JSON for API requests
         if ($request->wantsJson() || $request->expectsJson()) {
+            // Load relations including images (assuming 'image' and 'og_image' relations exist or we use MediaFile::find)
+            // But News model might not have 'og_image' relation defined?
+            // 'image' relation IS defined in News.php lines 51-54 (as 'image' method?) No, line 51 is 'image'.
+            // Wait, News.php has 'image_id'.
+            // It does NOT have 'image()' relation returning BelongsTo MediaFile?
+            // Line 199 in News.php uses get_file_url using image_id.
+            
+            // Let's load the media files manually to be safe or add relation if possible.
+            // Safe bet is to fetch them here or use get_file_url but return path if possible?
+            // get_file_url returns URL.
+            // Let's rely on finding the media file content.
+            
+            $row->load(['author', 'category', 'tags']);
+            $data = $row->toArray();
+            
+            // Fetch media files to get paths
+            if ($row->image_id) {
+                $media = \Modules\Media\Models\MediaFile::find($row->image_id);
+                if ($media) {
+                    $data['image_file_path'] = $media->file_path;
+                    $data['image_url'] = get_file_url($row->image_id, 'full');
+                }
+            }
+            if ($row->og_image_id) {
+                $media = \Modules\Media\Models\MediaFile::find($row->og_image_id);
+                if ($media) {
+                    $data['og_image_file_path'] = $media->file_path;
+                    $data['og_image_url'] = get_file_url($row->og_image_id, 'full');
+                }
+            }
+            
+            // Map cat_id to category_id
+            $data['category_id'] = $row->cat_id;
+
+            // Merge translation data
+            if ($translation) {
+                $transData = $translation->toArray();
+                $data = array_merge($data, $transData);
+            }
+
             return response()->json([
-                'data' => $row->load(['author', 'category', 'tags']),
+                'data' => $data,
                 'translation' => $translation
             ]);
         }
@@ -171,11 +210,30 @@ class NewsController extends AdminController
             }
 
             // Return JSON for API requests
-            if ($request->wantsJson() || $request->expectsJson()) {
+            if ($request->wantsJson() || $request->expectsJson() || $request->is('api/*')) {
+                 $row->reload(); 
+                    
+                // Manually constructing image paths to avoid double prefixes
+                $data = $row->load(['author', 'category', 'tags'])->toArray();
+                if ($row->image_id) {
+                        $media = \Modules\Media\Models\MediaFile::find($row->image_id);
+                        if ($media) {
+                            $data['image_file_path'] = $media->file_path;
+                            $data['image_url'] = get_file_url($row->image_id, 'full');
+                        }
+                }
+                if ($row->og_image_id) {
+                        $media = \Modules\Media\Models\MediaFile::find($row->og_image_id);
+                        if ($media) {
+                            $data['og_image_file_path'] = $media->file_path;
+                            $data['og_image_url'] = get_file_url($row->og_image_id, 'full');
+                        }
+                }
+
                 return response()->json([
                     'success' => true,
                     'message' => $id > 0 ? __('News updated') : __('News created'),
-                    'data' => $row->load(['author', 'category', 'tags'])
+                    'data' => $data
                 ]);
             }
 

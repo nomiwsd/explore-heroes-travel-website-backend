@@ -35,11 +35,40 @@ Route::prefix('module/news')->group(function () {
             
             $posts = $query->orderBy('id', 'desc')->paginate($request->input('limit', 20));
             
+            $mappedPosts = collect($posts->items())->map(function($post) {
+                return [
+                    'id' => $post->id,
+                    'title' => $post->title,
+                    'slug' => $post->slug,
+                    'status' => $post->status,
+                    'is_featured' => $post->is_featured,
+                    'image_id' => $post->image_id,
+                    'cat_id' => $post->cat_id,
+                    'category_id' => $post->cat_id,
+                    'created_at' => $post->created_at,
+                    'updated_at' => $post->updated_at,
+                    'category' => $post->category,
+                    'author' => ($post->author && $post->author->id) ? [
+                        'id' => $post->author->id,
+                        'display_name' => $post->author->getDisplayName() ?: $post->author->name ?: $post->author->email ?: 'Unknown',
+                        'email' => $post->author->email,
+                    ] : ($post->create_user ? (function() use ($post) {
+                        $u = \App\User::find($post->create_user);
+                        return $u ? [
+                            'id' => $u->id,
+                            'display_name' => $u->getDisplayName() ?: $u->name ?: $u->email ?: 'Unknown',
+                            'email' => $u->email,
+                        ] : ['display_name' => 'Unknown'];
+                    })() : ['display_name' => 'Unknown']),
+                ];
+            });
+            
             return response()->json([
-                'data' => $posts->items(),
+                'data' => $mappedPosts,
                 'total' => $posts->total(),
                 'current_page' => $posts->currentPage(),
                 'last_page' => $posts->lastPage(),
+                'per_page' => $posts->perPage(),
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -65,6 +94,29 @@ Route::prefix('module/news')->group(function () {
                 $gallery = json_decode($post->gallery, true) ?: [];
             }
             
+            // Get image file paths and construct URLs without double 'uploads' prefix
+            $imageFilePath = null;
+            $imageUrl = null;
+            if ($post->image_id) {
+                $media = \Modules\Media\Models\MediaFile::find($post->image_id);
+                if ($media) {
+                    $imageFilePath = $media->file_path;
+                    // Construct URL properly - file_path already contains 'uploads/'
+                    $imageUrl = url($media->file_path);
+                }
+            }
+            
+            $ogImageFilePath = null;
+            $ogImageUrl = null;
+            if ($post->og_image_id) {
+                $media = \Modules\Media\Models\MediaFile::find($post->og_image_id);
+                if ($media) {
+                    $ogImageFilePath = $media->file_path;
+                    // Construct URL properly - file_path already contains 'uploads/'
+                    $ogImageUrl = url($media->file_path);
+                }
+            }
+            
             return response()->json([
                 'data' => [
                     'id' => $post->id,
@@ -76,7 +128,10 @@ Route::prefix('module/news')->group(function () {
                     'image_id' => $post->image_id,
                     'og_image_id' => $post->og_image_id,
                     'image_alt' => $post->image_alt,
-                    'image_url' => $post->image_url ?? null,
+                    'image_url' => $imageUrl,
+                    'image_file_path' => $imageFilePath,
+                    'og_image_url' => $ogImageUrl,
+                    'og_image_file_path' => $ogImageFilePath,
                     'cat_id' => $post->cat_id,
                     'category_id' => $post->cat_id, // Alias for frontend
                     'location_id' => $post->location_id,
@@ -87,11 +142,23 @@ Route::prefix('module/news')->group(function () {
                     'tag_ids' => $tagIds,
                     'related_posts' => $relatedPosts,
                     'gallery' => $gallery,
-                    'meta_title' => $seoMeta['seo_title'] ?? null,
-                    'meta_desc' => $seoMeta['seo_desc'] ?? null,
-                    'meta_keywords' => null, // Not stored in bc_seo table
+                    'meta_title' => $seoMeta['seo_title'] ?? $post->meta_title ?? null,
+                    'meta_desc' => $seoMeta['seo_desc'] ?? $post->meta_desc ?? null,
+                    'meta_keywords' => $post->meta_keywords ?? null,
                     'category' => $post->category,
-                    'author' => $post->author,
+                    'author' => ($post->author && $post->author->id) ? [
+                        'id' => $post->author->id,
+                        'display_name' => $post->author->getDisplayName(),
+                        'email' => $post->author->email,
+                    ] : ($post->create_user ? [
+                        'id' => $post->create_user,
+                        'display_name' => \App\User::find($post->create_user)?->getDisplayName() ?? 'Unknown',
+                        'email' => \App\User::find($post->create_user)?->email ?? '',
+                    ] : [
+                        'id' => auth()->id(),
+                        'display_name' => auth()->user()?->getDisplayName() ?? 'Unknown',
+                        'email' => auth()->user()?->email ?? '',
+                    ]),
                     'created_at' => $post->created_at,
                     'updated_at' => $post->updated_at,
                 ],
@@ -111,6 +178,7 @@ Route::prefix('module/news')->group(function () {
                 } else {
                     $post = new News();
                     $post->create_user = auth()->id();
+                    $post->author_id = auth()->id(); // Set author to current user for new posts
                 }
                 
                 // Basic fields
@@ -143,6 +211,14 @@ Route::prefix('module/news')->group(function () {
                 }
                 if ($request->has('gallery')) {
                     $post->gallery = json_encode($request->input('gallery'));
+                }
+                
+                // Meta keywords (saved directly to news table)
+                $post->meta_keywords = $request->input('meta_keywords');
+                
+                // Set author_id if not set (for existing posts without author)
+                if (!$post->author_id) {
+                    $post->author_id = auth()->id();
                 }
                 
                 $post->update_user = auth()->id();
@@ -327,7 +403,15 @@ Route::prefix('module/news/category')->middleware('auth:sanctum')->group(functio
             
             return response()->json([
                 'success' => true,
-                'data' => ['id' => $category->id],
+                'data' => [
+                    'id' => $category->id,
+                    'name' => $category->name,
+                    'slug' => $category->slug,
+                    'description' => $category->content,
+                    'content' => $category->content,
+                    'image_id' => $category->image_id,
+                    'status' => $category->status,
+                ],
                 'message' => 'Category saved successfully',
             ]);
         } catch (\Exception $e) {
@@ -449,7 +533,12 @@ Route::prefix('module/news/tag')->middleware('auth:sanctum')->group(function () 
             
             return response()->json([
                 'success' => true,
-                'data' => ['id' => $tag->id],
+                'data' => [
+                    'id' => $tag->id,
+                    'name' => $tag->name,
+                    'slug' => $tag->slug,
+                    'content' => $tag->content,
+                ],
                 'message' => 'Tag saved successfully',
             ]);
         } catch (\Exception $e) {

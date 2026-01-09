@@ -12,7 +12,7 @@ use App\BaseModel;
 class NewsTranslation extends BaseModel
 {
     protected $table = 'core_news_translations';
-    protected $fillable = ['title', 'content'];
+    protected $fillable = ['title', 'content', 'meta_title', 'meta_desc', 'meta_keywords'];
     protected $seo_type = 'news_translation';
     protected $cleanFields = [
         'content'

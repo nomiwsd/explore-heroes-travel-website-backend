@@ -87,6 +87,15 @@ class CategoryController extends AdminController
         $res = $row->saveOriginOrTranslation($request->input('lang'));
 
         if ($res) {
+            if ($request->wantsJson() || $request->expectsJson() || $request->is('api/*')) {
+                // Return full object with success flag for frontend
+                return response()->json([
+                    'success' => true,
+                    'message' => $id > 0 ? __('Category updated') : __('Category created'),
+                    'data' => $row
+                ]);
+            }
+
             if($id > 0 ){
                 return back()->with('success',  __('Category updated') );
             }else{
