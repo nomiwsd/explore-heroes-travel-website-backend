@@ -26,12 +26,18 @@
             'parent_id',
             'banner_image_id',
             'trip_ideas',
+            'is_featured',
+            'show_on_homepage',
+            'destination_type',
+            'display_order',
+            'gallery'
         ];
         protected $slugField     = 'slug';
         protected $slugFromField = 'name';
         protected $seo_type      = 'location';
         protected $casts         = [
-            'trip_ideas' => 'array'
+            'trip_ideas' => 'array',
+            'gallery'    => 'array'
         ];
 
         protected $translation_class = LocationTranslation::class;
@@ -140,5 +146,10 @@
         public function properties()
         {
             return $this->hasMany(Property::class, 'location_id');
+        }
+
+        public function tours()
+        {
+            return $this->hasMany(\Modules\Tour\Models\TourLocation::class, 'location_id');
         }
     }

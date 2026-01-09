@@ -52,8 +52,14 @@ require __DIR__ . '/api/auth.php';
 // Tour Management
 require __DIR__ . '/api/admin/tour.php';
 
-// Location/Destination Management
-require __DIR__ . '/api/admin/location.php';
+// Location/Destination Management (Handled by Modules/Location)
+Route::prefix('module/location')->group(function () {
+    Route::get('/', [\Modules\Location\Admin\LocationController::class, 'index']);
+    Route::get('/edit/{id}', [\Modules\Location\Admin\LocationController::class, 'edit']);
+    Route::post('/store', [\Modules\Location\Admin\LocationController::class, 'store'])->middleware('auth:sanctum');
+    Route::post('/store/{id}', [\Modules\Location\Admin\LocationController::class, 'store'])->middleware('auth:sanctum');
+    Route::post('/bulkEdit', [\Modules\Location\Admin\LocationController::class, 'bulkEdit'])->middleware('auth:sanctum');
+});
 
 // News/Blog Management
 require __DIR__ . '/api/admin/news.php';

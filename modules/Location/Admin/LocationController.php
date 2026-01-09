@@ -65,8 +65,49 @@ class LocationController extends AdminController
 
         // Return JSON for API requests
         if ($request->wantsJson() || $request->expectsJson()) {
+            $imageUrl = null;
+            if ($row->image_id) {
+                $url = get_file_url($row->image_id, 'full');
+                $imageUrl = $url ?: null;
+            }
+            
+            $bannerImageUrl = null;
+            if ($row->banner_image_id) {
+                $url = get_file_url($row->banner_image_id, 'full');
+                $bannerImageUrl = $url ?: null;
+            }
+
+            $seo = $row->getSeoMeta();
+
             return response()->json([
-                'data' => $row,
+                'data' => [
+                    'id' => $row->id,
+                    'name' => $row->name,
+                    'slug' => $row->slug,
+                    'content' => $translation->content,
+                    'image_id' => $row->image_id,
+                    'image_url' => $imageUrl,
+                    'banner_image_id' => $row->banner_image_id ?? null,
+                    'banner_image_url' => $bannerImageUrl,
+                    'gallery' => $row->gallery,
+                    'map_lat' => $row->map_lat,
+                    'map_lng' => $row->map_lng,
+                    'map_zoom' => $row->map_zoom,
+                    'status' => $row->status,
+                    'parent_id' => $row->parent_id,
+                    'is_featured' => $row->is_featured,
+                    'show_on_homepage' => $row->show_on_homepage,
+                    'destination_type' => $row->destination_type ?? 'city',
+                    'display_order' => $row->display_order ?? 0,
+                    'short_description' => $translation->short_description,
+                    'seo_title' => $seo['seo_title'] ?? '',
+                    'seo_desc' => $seo['seo_desc'] ?? '',
+                    'tours' => $row->tours->map(function($tl){
+                        return ['id' => $tl->tour_id];
+                    }),
+                    'created_at' => $row->created_at,
+                    'updated_at' => $row->updated_at,
+                ],
                 'translation' => $translation
             ]);
         }
@@ -90,7 +131,7 @@ class LocationController extends AdminController
         return view('Location::admin.detail', $data);
     }
 
-    public function store( Request $request, $id ){
+    public function store( Request $request, $id = null ){
         if(is_demo_mode()){
             return redirect()->back()->with('danger',__("DEMO MODE: can not add data"));
         }
@@ -106,14 +147,48 @@ class LocationController extends AdminController
             $row->status = "publish";
         }
 
-        $row->fill($request->input());
+        $record = $row->fill($request->input());
+        $row->map_lat = $request->input('map_lat');
+        $row->map_lng = $request->input('map_lng');
+        $row->map_zoom = $request->input('map_zoom');
         $row->trip_ideas = $request->input('trip_ideas');
         if($request->input('slug')){
             $row->slug = $request->input('slug');
         }
+        $row->gallery = $request->input('gallery');
+        
         do_action(\Modules\Location\Hook::BEFORE_SAVING,$row,$request);
         $res = $row->saveOriginOrTranslation($request->input('lang'),true);
         if ($res) {
+            // Ensure translation fields are saved (especially if they are not in the main model)
+            $translation = $row->translate($request->input('lang'));
+            $translation->short_description = $request->input('short_description');
+            $translation->content = $request->input('content');
+            $translation->save();
+            
+            // Save SEO
+            $row->saveSEO($request);
+
+            // Save Tours
+            $tours = $request->input('assigned_tour_ids');
+            if (is_array($tours)) {
+                \Modules\Tour\Models\TourLocation::where('location_id', $row->id)->delete();
+                foreach ($tours as $tour_id) {
+                    $tl = new \Modules\Tour\Models\TourLocation();
+                    $tl->location_id = $row->id;
+                    $tl->tour_id = $tour_id;
+                    $tl->save();
+                }
+            }
+
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $id > 0 ? __('Location updated') : __('Location created'),
+                    'data' => ['id' => $row->id]
+                ]);
+            }
+
             if($id > 0 ){
                 return back()->with('success',  __('Location updated') );
             }else{

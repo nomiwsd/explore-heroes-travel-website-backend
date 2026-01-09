@@ -49,6 +49,11 @@ Route::prefix('module/location')->group(function () {
                     'map_zoom' => $loc->map_zoom,
                     'status' => $loc->status,
                     'parent_id' => $loc->parent_id,
+                    'is_featured' => $loc->is_featured,
+                    'show_on_homepage' => $loc->show_on_homepage,
+                    'destination_type' => $loc->destination_type,
+                    'display_order' => $loc->display_order,
+                    'short_description' => $loc->translate()->short_description,
                     'created_at' => $loc->created_at,
                     'updated_at' => $loc->updated_at,
                 ];
@@ -84,21 +89,34 @@ Route::prefix('module/location')->group(function () {
                 $bannerImageUrl = $url ?: null;
             }
             
+            $seo = $loc->getSeoMeta();
+            
             return response()->json([
                 'data' => [
                     'id' => $loc->id,
                     'name' => $loc->name,
                     'slug' => $loc->slug,
-                    'content' => $loc->content,
+                    'content' => $loc->translate()->content,
                     'image_id' => $loc->image_id,
                     'image_url' => $imageUrl,
                     'banner_image_id' => $loc->banner_image_id ?? null,
                     'banner_image_url' => $bannerImageUrl,
+                    'gallery' => $loc->gallery,
                     'map_lat' => $loc->map_lat,
                     'map_lng' => $loc->map_lng,
                     'map_zoom' => $loc->map_zoom,
                     'status' => $loc->status,
                     'parent_id' => $loc->parent_id,
+                    'is_featured' => $loc->is_featured,
+                    'show_on_homepage' => $loc->show_on_homepage,
+                    'destination_type' => $loc->destination_type ?? 'city',
+                    'display_order' => $loc->display_order ?? 0,
+                    'short_description' => $loc->translate()->short_description,
+                    'seo_title' => $seo['seo_title'] ?? '',
+                    'seo_desc' => $seo['seo_desc'] ?? '',
+                    'tours' => $loc->tours->map(function($tl){
+                        return ['id' => $tl->tour_id];
+                    }),
                     'created_at' => $loc->created_at,
                     'updated_at' => $loc->updated_at,
                 ],
@@ -114,10 +132,33 @@ Route::prefix('module/location')->group(function () {
             $loc = new Location();
             $loc->fill($request->only([
                 'name', 'slug', 'content', 'image_id', 'banner_image_id',
-                'map_lat', 'map_lng', 'map_zoom', 'status', 'parent_id'
+                'map_lat', 'map_lng', 'map_zoom', 'status', 'parent_id',
+                'is_featured', 'show_on_homepage', 'destination_type', 'display_order', 'gallery'
             ]));
             $loc->create_user = $request->user()->id ?? 1;
             $loc->save();
+
+            // Save translation
+            $translation = $loc->translate($request->input('lang', 'en'));
+            $translation->name = $request->input('name');
+            $translation->content = $request->input('content');
+            $translation->short_description = $request->input('short_description');
+            $translation->save();
+
+            // SEO
+            $loc->saveSEO($request);
+
+            // Tours
+            $tours = $request->input('assigned_tour_ids');
+            if (is_array($tours)) {
+                Modules\Tour\Models\TourLocation::where('location_id', $loc->id)->delete();
+                foreach ($tours as $tour_id) {
+                    $tl = new Modules\Tour\Models\TourLocation();
+                    $tl->location_id = $loc->id;
+                    $tl->tour_id = $tour_id;
+                    $tl->save();
+                }
+            }
             
             return response()->json([
                 'success' => true,
@@ -135,9 +176,32 @@ Route::prefix('module/location')->group(function () {
             $loc = Location::findOrFail($id);
             $loc->fill($request->only([
                 'name', 'slug', 'content', 'image_id', 'banner_image_id',
-                'map_lat', 'map_lng', 'map_zoom', 'status', 'parent_id'
+                'map_lat', 'map_lng', 'map_zoom', 'status', 'parent_id',
+                'is_featured', 'show_on_homepage', 'destination_type', 'display_order', 'gallery'
             ]));
             $loc->save();
+
+            // Save translation
+            $translation = $loc->translate($request->input('lang', 'en'));
+            $translation->name = $request->input('name');
+            $translation->content = $request->input('content');
+            $translation->short_description = $request->input('short_description');
+            $translation->save();
+
+            // SEO
+            $loc->saveSEO($request);
+
+            // Tours
+            $tours = $request->input('assigned_tour_ids');
+            if (is_array($tours)) {
+                Modules\Tour\Models\TourLocation::where('location_id', $loc->id)->delete();
+                foreach ($tours as $tour_id) {
+                    $tl = new Modules\Tour\Models\TourLocation();
+                    $tl->location_id = $loc->id;
+                    $tl->tour_id = $tour_id;
+                    $tl->save();
+                }
+            }
             
             return response()->json([
                 'success' => true,

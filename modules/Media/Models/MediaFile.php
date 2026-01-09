@@ -46,10 +46,14 @@ class MediaFile extends BaseModel
                 $filePath = implode('/',$ex_file);
                 $old_path = "$filePath/old/$fileName";
                 if ($storage->exists($old_path)){
-                    return asset("uploads/$old_path");
+                    $path = $old_path;
                 } else {
-                    return asset("uploads/$this->file_path");
+                    $path = $this->file_path;
                 }
+                if (str_starts_with($path, 'uploads/')) {
+                    return asset($path);
+                }
+                return asset("uploads/$path");
                 break;
         }
 
@@ -122,7 +126,11 @@ class MediaFile extends BaseModel
                         return $this->generateUrl($this->file_path);
                         break;
                     default:
-                        return asset('uploads/' . $this->file_path);
+                        $path = $this->file_path;
+                        if (str_starts_with($path, 'uploads/')) {
+                            return asset($path);
+                        }
+                        return asset('uploads/' . $path);
                         break;
                 }
             }

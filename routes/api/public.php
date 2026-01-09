@@ -68,6 +68,11 @@ Route::prefix('destinations')->group(function () {
         try {
             $query = Location::where('status', 'publish');
             
+            // Filter by destination_type
+            if ($request->has('type') && !empty($request->type)) {
+                $query->where('destination_type', $request->type);
+            }
+            
             // Filter by is_featured
             if ($request->has('featured') && $request->featured == '1') {
                 $query->where('is_featured', 1);
@@ -75,10 +80,10 @@ Route::prefix('destinations')->group(function () {
             
             // Filter by show_on_homepage
             if ($request->has('homepage') && $request->homepage == '1') {
-                $query->where('is_featured', 1);
+                $query->where('show_on_homepage', 1);
             }
             
-            $destinations = $query->orderBy('name', 'asc')->get();
+            $destinations = $query->orderBy('display_order', 'asc')->orderBy('name', 'asc')->get();
             
             return response()->json([
                 'data' => $destinations->map(function ($dest) {
@@ -86,14 +91,16 @@ Route::prefix('destinations')->group(function () {
                         'id' => $dest->id,
                         'name' => $dest->name,
                         'slug' => $dest->slug,
-                        'content' => $dest->content,
-                        'short_description' => $dest->content ? \Illuminate\Support\Str::limit(strip_tags($dest->content), 150) : null,
+                        'short_description' => $dest->translate()->short_description ?? ($dest->content ? \Illuminate\Support\Str::limit(strip_tags($dest->content), 150) : null),
                         'image_url' => $dest->image_id ? get_file_url($dest->image_id, 'full') : null,
-                        'banner_url' => $dest->banner_image_id ? get_file_url($dest->banner_image_id, 'full') : null,
+                        'banner_image_url' => $dest->banner_image_id ? get_file_url($dest->banner_image_id, 'full') : null,
                         'map_lat' => $dest->map_lat,
                         'map_lng' => $dest->map_lng,
                         'is_featured' => $dest->is_featured,
-                        'tours_count' => Tour::where('location_id', $dest->id)->where('status', 'publish')->count(),
+                        'show_on_homepage' => $dest->show_on_homepage,
+                        'destination_type' => $dest->destination_type,
+                        'display_order' => $dest->display_order,
+                        'tours_count' => \Modules\Tour\Models\TourLocation::where('location_id', $dest->id)->count() ?: Tour::where('location_id', $dest->id)->where('status', 'publish')->count(),
                     ];
                 }),
                 'total' => $destinations->count(),
@@ -114,22 +121,53 @@ Route::prefix('destinations')->group(function () {
                 return response()->json(['error' => 'Destination not found'], 404);
             }
             
-            // Get related tours
-            $tours = Tour::where('location_id', $destination->id)
-                ->where('status', 'publish')
-                ->orderBy('is_featured', 'desc')
-                ->orderBy('created_at', 'desc')
-                ->get();
+            $translation = $destination->translate();
+            $seo = $destination->getSeoMeta();
+
+            // Get assigned tours via pivot table
+            $assignedTourIds = \Modules\Tour\Models\TourLocation::where('location_id', $destination->id)->pluck('tour_id');
+            
+            if ($assignedTourIds->count() > 0) {
+                $tours = Tour::whereIn('id', $assignedTourIds)
+                    ->where('status', 'publish')
+                    ->get();
+            } else {
+                // Fallback to old location_id column
+                $tours = Tour::where('location_id', $destination->id)
+                    ->where('status', 'publish')
+                    ->orderBy('is_featured', 'desc')
+                    ->orderBy('created_at', 'desc')
+                    ->get();
+            }
+
+            // Parse gallery
+            $gallery = [];
+            if ($destination->gallery) {
+                $galleryIds = is_array($destination->gallery) ? $destination->gallery : json_decode($destination->gallery, true);
+                if (is_array($galleryIds)) {
+                    foreach ($galleryIds as $id) {
+                        $url = get_file_url($id, 'full');
+                        if ($url) $gallery[] = $url;
+                    }
+                }
+            }
             
             return response()->json([
                 'data' => [
                     'id' => $destination->id,
-                    'name' => $destination->name,
+                    'name' => $translation->name ?? $destination->name,
                     'slug' => $destination->slug,
-                    'content' => $destination->content,
+                    'short_description' => $translation->short_description,
+                    'content' => $translation->content,
                     'image_url' => $destination->image_id ? get_file_url($destination->image_id, 'full') : null,
+                    'banner_image_url' => $destination->banner_image_id ? get_file_url($destination->banner_image_id, 'full') : null,
+                    'gallery_images' => $gallery,
+                    'destination_type' => $destination->destination_type,
                     'map_lat' => $destination->map_lat,
                     'map_lng' => $destination->map_lng,
+                    'map_zoom' => $destination->map_zoom,
+                    'meta_title' => $seo['seo_title'] ?? $destination->name,
+                    'meta_description' => $seo['seo_desc'] ?? $translation->short_description,
                     'tours' => $tours->map(function ($tour) {
                         return [
                             'id' => $tour->id,

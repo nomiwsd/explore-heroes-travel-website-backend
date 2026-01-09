@@ -80,20 +80,36 @@ class FileHelper
     protected static function maybeResize($fileObj, $size = '',$resize = true)
     {
 
-        if ($size == 'full' or in_array(strtolower($fileObj->file_extension),['svg','bmp']))
-            return asset('uploads/' . $fileObj->file_path);
+        if ($size == 'full' or in_array(strtolower($fileObj->file_extension),['svg','bmp'])) {
+            $path = $fileObj->file_path;
+            if (str_starts_with($path, 'uploads/')) {
+                return asset($path);
+            }
+            return asset('uploads/' . $path);
+        }
         if (!isset($size, static::$defaultSize))
             $size = 'medium';
         $sizeData = static::$defaultSize[$size];
         if ($sizeData[0] >= $fileObj->file_width) {
-            return asset('uploads/' . $fileObj->file_path);
+            $path = $fileObj->file_path;
+            if (str_starts_with($path, 'uploads/')) {
+                return asset($path);
+            }
+            return asset('uploads/' . $path);
         }
         $resizeFile = substr($fileObj->file_path, 0, strrpos($fileObj->file_path, '.')) . '-' . $sizeData[0] . '.' . $fileObj->file_extension;
 
         if (Storage::disk('uploads')->exists($resizeFile)) {
+            if (str_starts_with($resizeFile, 'uploads/')) {
+                return asset($resizeFile);
+            }
             return asset('uploads/' . $resizeFile);
         }elseif(!$resize){
-            return asset('uploads/' . $fileObj->file_path);
+            $path = $fileObj->file_path;
+            if (str_starts_with($path, 'uploads/')) {
+                return asset($path);
+            }
+            return asset('uploads/' . $path);
         } else {
 
             $image_path = public_path('uploads/' . $fileObj->file_path);
@@ -159,7 +175,11 @@ class FileHelper
 
         $resize->saveImage(public_path('uploads/'.$resizeFile), "100");
 
+        if (str_starts_with($resizeFile, 'uploads/')) {
+            return asset($resizeFile);
+        }
         return asset('uploads/' . $resizeFile);
+
     }
 
     public static function isImage($fileObj)
