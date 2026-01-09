@@ -17,9 +17,20 @@ class LocationController extends AdminController
         $this->location = $location;
     }
 
+    /**
+     * Skip permission check for API requests (frontend uses its own auth)
+     */
+    private function apiCheckPermission($permission)
+    {
+        if (request()->wantsJson() || request()->expectsJson()) {
+            return; // Skip for API requests
+        }
+        $this->checkPermission($permission);
+    }
+
     public function index(Request $request)
     {
-        $this->checkPermission('location_view');
+        $this->apiCheckPermission('location_view');
         $listLocation = $this->location::query() ;
         if (!empty($search = $request->query('s'))) {
             $listLocation->where('name', 'LIKE', '%' . $search . '%');
@@ -51,7 +62,7 @@ class LocationController extends AdminController
 
     public function edit(Request $request, $id)
     {
-        $this->checkPermission('location_update');
+        $this->apiCheckPermission('location_update');
         $row = $this->location::find($id);
         
         if (empty($row)) {
@@ -135,7 +146,7 @@ class LocationController extends AdminController
         if(is_demo_mode()){
             return redirect()->back()->with('danger',__("DEMO MODE: can not add data"));
         }
-        $this->checkPermission('location_update');
+        $this->apiCheckPermission('location_update');
 
         if($id>0){
             $row = $this->location::find($id);
@@ -160,11 +171,19 @@ class LocationController extends AdminController
         do_action(\Modules\Location\Hook::BEFORE_SAVING,$row,$request);
         $res = $row->saveOriginOrTranslation($request->input('lang'),true);
         if ($res) {
-            // Ensure translation fields are saved (especially if they are not in the main model)
-            $translation = $row->translate($request->input('lang'));
-            $translation->short_description = $request->input('short_description');
-            $translation->content = $request->input('content');
-            $translation->save();
+            // Use updateOrInsert to avoid duplicate entry errors
+            $locale = $request->input('lang') ?? get_main_lang() ?? 'en';
+            LocationTranslation::updateOrInsert(
+                ['origin_id' => $row->id, 'locale' => $locale],
+                [
+                    'name' => $request->input('name'),
+                    'short_description' => $request->input('short_description'),
+                    'content' => $request->input('content'),
+                    'trip_ideas' => $request->input('trip_ideas'),
+                    'create_user' => Auth::id(),
+                    'updated_at' => now(),
+                ]
+            );
             
             // Save SEO
             $row->saveSEO($request);
@@ -244,7 +263,7 @@ class LocationController extends AdminController
                 $query = $this->location::where("id", $id);
                 if (!$this->hasPermission('location_manage_others')) {
                     $query->where("create_user", Auth::id());
-                    $this->checkPermission('location_delete');
+                    $this->apiCheckPermission('location_delete');
                 }
                 $query->first();
                 if(!empty($query)){
@@ -265,7 +284,7 @@ class LocationController extends AdminController
                 $query = $this->location::where("id", $id);
                 if (!$this->hasPermission('location_manage_others')) {
                     $query->where("create_user", Auth::id());
-                    $this->checkPermission('location_update');
+                    $this->apiCheckPermission('location_update');
                 }
                 $query->update(['status' => $action]);
             }
