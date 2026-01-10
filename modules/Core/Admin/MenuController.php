@@ -36,8 +36,12 @@ class MenuController extends AdminController
     public function getLocations()
     {
         return [
-            'primary' => __("Primary"),
-//            'footer'  => __("Footer"),
+            'primary'  => __("Primary Menu"),
+            'header'   => __("Header Menu"),
+            'footer_1' => __("Footer Column 1"),
+            'footer_2' => __("Footer Column 2"),
+            'footer_3' => __("Footer Column 3"),
+            'mobile'   => __("Mobile Menu"),
         ];
     }
 

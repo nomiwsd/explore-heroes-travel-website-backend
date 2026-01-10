@@ -149,7 +149,7 @@ Route::prefix('module/core/menu')->group(function () {
                 [
                     'key' => 'page',
                     'name' => 'Pages',
-                    'items' => \DB::table('bc_pages')
+                    'items' => \DB::table('core_pages')
                         ->where('status', 'publish')
                         ->select('id', 'title as name', 'slug')
                         ->get()
@@ -175,12 +175,12 @@ Route::prefix('module/core/menu')->group(function () {
                 [
                     'key' => 'news',
                     'name' => 'News/Blog',
-                    'items' => \DB::table('bc_news')
+                    'items' => \DB::table('core_news')
                         ->where('status', 'publish')
                         ->select('id', 'title as name', 'slug')
                         ->limit(50)
                         ->get()
-                        ->map(fn($item) => ['id' => $item->id, 'name' => $item->name, 'url' => '/blog/' . $item->slug]),
+                        ->map(fn($item) => ['id' => $item->id, 'name' => $item->name, 'url' => '/blogs/' . $item->slug]),
                 ],
                 [
                     'key' => 'tour_category',
@@ -194,7 +194,7 @@ Route::prefix('module/core/menu')->group(function () {
             
             return response()->json($types);
         } catch (\Exception $e) {
-            return response()->json([]);
+            return response()->json(['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
         }
     });
     
@@ -207,7 +207,7 @@ Route::prefix('module/core/menu')->group(function () {
             
             switch ($type) {
                 case 'page':
-                    $items = \DB::table('bc_pages')
+                    $items = \DB::table('core_pages')
                         ->where('status', 'publish')
                         ->where('title', 'LIKE', '%' . $query . '%')
                         ->select('id', 'title as name', 'slug')
@@ -249,7 +249,7 @@ Route::prefix('module/core/menu')->group(function () {
             
             switch ($type) {
                 case 'page':
-                    $query = \DB::table('bc_pages')->where('status', 'publish');
+                    $query = \DB::table('core_pages')->where('status', 'publish');
                     $total = $query->count();
                     $items = $query->select('id', 'title as name', 'slug')
                         ->skip(($page - 1) * $perPage)
@@ -503,13 +503,13 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
             }
             
             // Pages
-            $pages = \DB::table('bc_pages')->where('status', 'publish')->get(['slug']);
+            $pages = \DB::table('core_pages')->where('status', 'publish')->get(['slug']);
             foreach ($pages as $page) {
                 $sitemapContent .= "<url><loc>{$baseUrl}/{$page->slug}</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n";
             }
             
             // Blog
-            $posts = \DB::table('bc_news')->where('status', 'publish')->get(['slug']);
+            $posts = \DB::table('core_news')->where('status', 'publish')->get(['slug']);
             foreach ($posts as $post) {
                 $sitemapContent .= "<url><loc>{$baseUrl}/blog/{$post->slug}</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>\n";
             }
