@@ -51,4 +51,17 @@ class PageController extends Controller
         }
         return view('Page::frontend.detail', $data);
     }
+    public function apiDetail($slug)
+    {
+        $page = Page::where('slug', $slug)->first();
+
+        if (empty($page) || $page->status != 'publish') {
+            return response()->json(['message' => 'Page not found'], 404);
+        }
+
+        // Add author and banner_image relationships if needed
+        $page->load(['author', 'banner_image', 'image']);
+
+        return response()->json($page);
+    }
 }

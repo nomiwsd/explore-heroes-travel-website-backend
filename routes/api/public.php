@@ -975,3 +975,23 @@ Route::post('/contact/store', function (Request $request) {
         return response()->json(['error' => $e->getMessage()], 500);
     }
 });
+
+// =====================================================
+// PAGE SETTINGS API (For Dynamic Page Content)
+// =====================================================
+Route::prefix('page-settings')->group(function () {
+    // Get page settings by slug (public - for frontend rendering)
+    Route::get('/{slug}', [\App\Http\Controllers\Api\PageSettingsController::class, 'show']);
+    
+    // Validate preview token
+    Route::get('/{slug}/validate-preview', [\App\Http\Controllers\Api\PageSettingsController::class, 'validatePreviewToken']);
+});
+
+// Admin routes for page settings (protected)
+Route::prefix('admin/page-settings')->middleware('auth:sanctum')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\PageSettingsController::class, 'index']);
+    Route::put('/{slug}', [\App\Http\Controllers\Api\PageSettingsController::class, 'update']);
+    Route::post('/{slug}/publish', [\App\Http\Controllers\Api\PageSettingsController::class, 'publish']);
+    Route::get('/{slug}/preview-token', [\App\Http\Controllers\Api\PageSettingsController::class, 'getPreviewToken']);
+});
+

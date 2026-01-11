@@ -20,7 +20,11 @@ class Page extends BaseModel
         'short_desc',
         'image_id',
         'header_style',
-        'custom_logo'
+        'custom_logo',
+        'banner_title',
+        'banner_image_id',
+        'display_order',
+        'show_in_menu'
     ];
     protected $slugField     = 'slug';
     protected $slugFromField = 'title';
@@ -72,6 +76,16 @@ class Page extends BaseModel
     public function template()
     {
         return $this->hasOne("\\Modules\\Template\\Models\\Template", 'id', 'template_id');
+    }
+
+    public function banner_image()
+    {
+        return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'banner_image_id');
+    }
+
+    public function image()
+    {
+        return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'image_id');
     }
 
     public function getProcessedContent()
