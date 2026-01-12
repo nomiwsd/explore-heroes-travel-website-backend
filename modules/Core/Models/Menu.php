@@ -39,20 +39,22 @@ class Menu extends BaseModel
                 $item['open'] = false;
                 if ($class == 'custom') {
                     $item['model_name'] = __('Custom');
-                }
-                if (method_exists($class, 'getAsMenuItem') and !empty($item['id'])) {
-                    $origin = call_user_func([
-                        $class,
-                        'getAsMenuItem'
-                    ], $item['id']);
-                    if (!empty($origin)) {
-                        $item['origin_name'] = $origin->name;
-                        $item['origin_edit_url'] = $origin->edit_url;
+                } else {
+                    $model_id = $item['model_id'] ?? $item['id'];
+                    if (method_exists($class, 'getAsMenuItem') and !empty($model_id)) {
+                        $origin = call_user_func([
+                            $class,
+                            'getAsMenuItem'
+                        ], $model_id);
+                        if (!empty($origin)) {
+                            $item['origin_name'] = $origin->name;
+                            $item['origin_edit_url'] = $origin->edit_url;
+                        } else {
+                            $item['is_removed'] = true;
+                        }
                     } else {
                         $item['is_removed'] = true;
                     }
-                } else {
-                    $item['is_removed'] = true;
                 }
                 if (method_exists($class, 'getModelName')) {
                     $item['model_name'] = call_user_func([
