@@ -22,22 +22,38 @@ Route::prefix('menus')->group(function () {
     // Get menu by location (header, footer, etc.)
     Route::get('/location/{location}', function ($location) {
         try {
+            // Try multiple query approaches for different MySQL versions
             $menu = Menu::where('status', 'publish')
-                ->whereRaw("JSON_CONTAINS(locations, '\"$location\"')")
+                ->where(function($q) use ($location) {
+                    // Method 1: JSON_CONTAINS (MySQL 5.7+)
+                    $q->whereRaw("JSON_CONTAINS(locations, '\"$location\"')")
+                      // Method 2: LIKE search for compatibility
+                      ->orWhere('locations', 'like', "%\"$location\"%")
+                      // Method 3: Direct array value
+                      ->orWhere('locations', 'like', "%$location%");
+                })
                 ->first();
             
             if (!$menu) {
+                // Log for debugging
+                \Log::info("Menu not found for location: $location");
                 return response()->json(null);
             }
+            
+            // Parse items from JSON string
+            $items = $menu->items_json ?? [];
+            
+            \Log::info("Menu found for location: $location, items count: " . count($items));
             
             return response()->json([
                 'id' => $menu->id,
                 'name' => $menu->name,
-                'items' => $menu->items_json,
+                'items' => $items,
                 'locations' => $menu->locations,
             ]);
         } catch (\Exception $e) {
-            return response()->json(null);
+            \Log::error("Menu location error: " . $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     });
     
@@ -55,6 +71,25 @@ Route::prefix('menus')->group(function () {
             }));
         } catch (\Exception $e) {
             return response()->json([]);
+        }
+    });
+    
+    // Debug: Get all menus with raw data
+    Route::get('/debug', function () {
+        try {
+            $menus = Menu::all();
+            return response()->json($menus->map(function ($menu) {
+                return [
+                    'id' => $menu->id,
+                    'name' => $menu->name,
+                    'status' => $menu->status,
+                    'locations_raw' => $menu->getAttributes()['locations'] ?? null,
+                    'locations_cast' => $menu->locations,
+                    'items_count' => count($menu->items_json),
+                ];
+            }));
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()]);
         }
     });
 });
@@ -1011,11 +1046,62 @@ Route::prefix('news')->group(function () {
 // PAGES API
 // =====================================================
 Route::prefix('pages')->group(function () {
-    // Get page by slug
+    // Get pages for menu (header/footer)
+    Route::get('/menu', function (Request $request) {
+        try {
+            $location = $request->input('location', 'menu'); // menu, header, footer
+            
+            $query = \Modules\Page\Models\Page::where('status', 'publish');
+            
+            if ($location === 'header') {
+                $query->where('show_in_header', true);
+            } elseif ($location === 'footer') {
+                $query->where('show_in_footer', true);
+            } else {
+                $query->where('show_in_menu', true);
+            }
+            
+            $pages = $query->orderBy('display_order', 'asc')->get();
+            
+            return response()->json([
+                'data' => $pages->map(function ($page) {
+                    return [
+                        'id' => $page->id,
+                        'title' => $page->title,
+                        'slug' => $page->slug,
+                        'url' => $page->slug === 'home' ? '/' : '/' . $page->slug,
+                    ];
+                })
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['data' => [], 'error' => $e->getMessage()]);
+        }
+    });
+    
+    // Get homepage
+    Route::get('/homepage', function () {
+        try {
+            $page = \Modules\Page\Models\Page::where('status', 'publish')
+                ->where('is_homepage', true)
+                ->first();
+            
+            if (!$page) {
+                // Fallback to slug 'home' or first page
+                $page = \Modules\Page\Models\Page::where('status', 'publish')
+                    ->where('slug', 'home')
+                    ->first();
+            }
+            
+            return response()->json($page);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+    
+    // Get page by slug (must be last due to wildcard)
     Route::get('/{slug}', function ($slug) {
         try {
-            $page = \DB::table('bc_pages')
-                ->where('slug', $slug)
+            $page = \Modules\Page\Models\Page::where('slug', $slug)
                 ->where('status', 'publish')
                 ->first();
             
