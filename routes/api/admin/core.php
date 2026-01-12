@@ -68,6 +68,7 @@ Route::prefix('module/core/menu')->group(function () {
     // Store/Update menu
     Route::middleware('auth:sanctum')->post('/store/{id?}', function (Request $request, $id = null) {
         try {
+            $id = $id ? $id : $request->input('id');
             if ($id) {
                 $menu = Menu::findOrFail($id);
             } else {
