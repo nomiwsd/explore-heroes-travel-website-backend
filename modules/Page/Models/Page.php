@@ -73,11 +73,6 @@ class Page extends BaseModel
         return url(route('page.admin.edit',['id'=>$this->id]));
     }
 
-    public function template()
-    {
-        return $this->hasOne("\\Modules\\Template\\Models\\Template", 'id', 'template_id');
-    }
-
     public function banner_image()
     {
         return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'banner_image_id');
@@ -86,15 +81,6 @@ class Page extends BaseModel
     public function image()
     {
         return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'image_id');
-    }
-
-    public function getProcessedContent()
-    {
-        $template = $this->template;
-        if(!empty($template)){
-            $translation = $template->translate();
-            return $translation->getProcessedContent();
-        }
     }
 
 }
