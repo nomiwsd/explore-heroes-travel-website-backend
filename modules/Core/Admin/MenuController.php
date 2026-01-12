@@ -251,12 +251,11 @@ class MenuController extends AdminController
             'items' => 'required',
             'name'  => 'required|max:255'
         ]);
-        if ($request->input('id')) {
-
+        $id = $request->input('id');
+        if ($id and $id > 0) {
             $this->checkPermission('menu_update');
-            $menu = Menu::find($request->input('id'));
+            $menu = Menu::find($id);
         } else {
-
             $this->checkPermission('menu_create');
             $menu = new Menu();
         }
@@ -314,6 +313,8 @@ class MenuController extends AdminController
                     }
                     $row = $query->first();
                     if (!empty($row)) {
+                        // Force delete to ensure it's gone if soft deletes are confusing things
+                        // But first check if it uses soft deletes.
                         $row->delete();
                     }
                 }
