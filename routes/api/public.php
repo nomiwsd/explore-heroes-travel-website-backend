@@ -660,6 +660,79 @@ Route::prefix('reviews')->group(function () {
             return response()->json(['data' => []]);
         }
     });
+
+    // Submit a public review
+    Route::post('/submit', function (Request $request) {
+        try {
+            // Allow either tour_id OR object_id/object_model
+            $rules = [
+                'title' => 'required',
+                'content' => 'required',
+                'rating' => 'required|numeric|min:1|max:5',
+            ];
+            
+            // If tour_id is provided, use it; otherwise require object_id and object_model
+            if ($request->has('tour_id') && $request->input('tour_id')) {
+                $rules['tour_id'] = 'required|numeric';
+            } else {
+                $rules['object_id'] = 'required';
+                $rules['object_model'] = 'required';
+            }
+            
+            $validator = \Illuminate\Support\Facades\Validator::make($request->all(), $rules);
+
+            if ($validator->fails()) {
+                return response()->json(['error' => $validator->errors()->first()], 400);
+            }
+
+            // Determine object_id and object_model from tour_id if provided
+            $objectId = $request->input('object_id');
+            $objectModel = $request->input('object_model', 'tour');
+            
+            if ($request->has('tour_id') && $request->input('tour_id')) {
+                $objectId = $request->input('tour_id');
+                $objectModel = 'tour';
+            }
+
+            $review = new \Modules\Review\Models\Review([
+                'object_id' => $objectId,
+                'object_model' => $objectModel,
+                'title' => $request->input('title'),
+                'content' => $request->input('content'),
+                'rate_number' => $request->input('rating'),
+                'author_ip' => $request->ip(),
+                'status' => 'pending',
+                'author_id' => auth('sanctum')->id() ?? null,
+            ]);
+
+            $review->save();
+
+            if ($request->has('author_name')) $review->addMeta('author_name', $request->input('author_name'));
+            if ($request->has('author_email')) $review->addMeta('author_email', $request->input('author_email'));
+            if ($request->has('author_location')) $review->addMeta('author_location', $request->input('author_location'));
+            
+            // Always save review_source and review_date with defaults
+            $review->addMeta('review_source', $request->input('review_source', 'website'));
+            $review->addMeta('review_date', $request->input('review_date', date('Y-m-d')));
+            
+            // Handle dynamic meta array
+            if ($request->has('meta') && is_array($request->input('meta'))) {
+                foreach ($request->input('meta') as $metaItem) {
+                    if (isset($metaItem['name']) && isset($metaItem['val'])) {
+                        $review->addMeta($metaItem['name'], $metaItem['val']);
+                    }
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Review submitted successfully',
+                'data' => $review
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
 });
 
 // =====================================================
@@ -972,6 +1045,10 @@ Route::post('/contact/store', function (Request $request) {
             'message' => $request->input('message'),
             'form_type' => $request->input('form_type', 'contact'),
             'tour_id' => $request->input('tour_id'),
+            'destination_name' => $request->input('destination_name'),
+            'travel_date' => $request->input('travel_date'),
+            'number_of_people' => $request->input('number_of_people'),
+            'special_requirements' => $request->input('special_requirements'),
             'status' => 'new',
             'created_at' => now(),
             'updated_at' => now(),

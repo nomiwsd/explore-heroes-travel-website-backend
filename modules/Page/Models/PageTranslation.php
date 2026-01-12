@@ -12,7 +12,7 @@ use App\BaseModel;
 class PageTranslation extends BaseModel
 {
     protected $table = 'core_page_translations';
-    protected $fillable = ['title', 'content'];
+    protected $fillable = ['title', 'content', 'origin_id', 'locale'];
     protected $seo_type = 'page_translation';
     protected $cleanFields = [
         'content'

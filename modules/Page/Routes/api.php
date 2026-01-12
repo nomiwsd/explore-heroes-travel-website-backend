@@ -14,3 +14,6 @@ use Illuminate\Http\Request;
 */
 
 Route::get('/page/{slug}', 'PageController@apiDetail');
+Route::get('/pages/homepage', 'PageController@homepage');
+Route::get('/pages/menu', 'PageController@menuPages');
+

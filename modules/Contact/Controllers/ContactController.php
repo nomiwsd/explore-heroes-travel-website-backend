@@ -61,8 +61,24 @@ class ContactController extends Controller
                 return response()->json($data, 200);
             }
         }
-        $row = new Contact($request->input());
-        $row->status = 'sent';
+
+        $contactData = $request->only([
+            'name',
+            'email',
+            'message',
+            'phone',
+            'subject',
+            'form_type',
+            'tour_id',
+            'travel_date',
+            'number_of_people',
+            'special_requirements',
+            'destination_name'
+        ]);
+
+        $row = new Contact($contactData);
+        $row->status = 'new';
+
         if ($row->save()) {
             $this->sendEmail($row);
             $data = [

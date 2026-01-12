@@ -64,4 +64,41 @@ class PageController extends Controller
 
         return response()->json($page);
     }
+
+    public function homepage()
+    {
+        $page = Page::where('is_homepage', true)->where('status', 'publish')->first();
+
+        if (empty($page)) {
+            // Fallback to slug 'home' if no specific homepage is set
+            $page = Page::where('slug', 'home')->where('status', 'publish')->first();
+        }
+
+        if (empty($page)) {
+             return response()->json(['message' => 'Homepage not found'], 404);
+        }
+
+        $page->load(['author', 'banner_image', 'image']);
+
+        return response()->json($page);
+    }
+
+    public function menuPages()
+    {
+        $location = request()->get('location', 'menu');
+        
+        $query = Page::where('status', 'publish');
+
+        if ($location === 'header') {
+            $query->where('show_in_header', true);
+        } elseif ($location === 'footer') {
+            $query->where('show_in_footer', true);
+        } else {
+             $query->where('show_in_menu', true);
+        }
+
+        $pages = $query->orderBy('display_order', 'asc')->get();
+
+        return response()->json(['data' => $pages]);
+    }
 }

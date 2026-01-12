@@ -15,6 +15,7 @@ class Page extends BaseModel
     protected $table = 'core_pages';
     protected $fillable = [
         'title',
+        'slug',
         'content',
         'status',
         'short_desc',
@@ -24,7 +25,14 @@ class Page extends BaseModel
         'banner_title',
         'banner_image_id',
         'display_order',
-        'show_in_menu'
+        'show_in_menu',
+        'show_in_header',
+        'show_in_footer',
+        'meta_title',
+        'meta_desc',
+        'meta_keywords',
+        'is_homepage',
+        'template_id'
     ];
     protected $slugField     = 'slug';
     protected $slugFromField = 'title';
@@ -41,6 +49,40 @@ class Page extends BaseModel
     protected $seo_type = 'page';
 
     protected $sitemap_type = 'page';
+
+    protected $casts = [
+        'show_in_menu' => 'boolean',
+        'show_in_header' => 'boolean',
+        'show_in_footer' => 'boolean',
+        'is_homepage' => 'boolean',
+        'display_order' => 'integer',
+    ];
+
+    // Query Scopes
+    public function scopePublished($query)
+    {
+        return $query->where('status', 'publish');
+    }
+
+    public function scopeMenuPages($query)
+    {
+        return $query->where('show_in_menu', true)->orderBy('display_order', 'asc');
+    }
+
+    public function scopeHeaderPages($query)
+    {
+        return $query->where('show_in_header', true)->orderBy('display_order', 'asc');
+    }
+
+    public function scopeFooterPages($query)
+    {
+        return $query->where('show_in_footer', true)->orderBy('display_order', 'asc');
+    }
+
+    public function scopeHomepage($query)
+    {
+        return $query->where('is_homepage', true);
+    }
 
     public function getDetailUrl($locale = false)
     {

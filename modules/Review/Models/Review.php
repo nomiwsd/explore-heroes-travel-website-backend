@@ -22,6 +22,9 @@ class Review extends BaseModel
         'status',
         'vendor_id',
         'author_id',
+        'is_featured',
+        'show_on_homepage',
+        'show_on_tour_page',
     ];
 
     public static function getDisplayTextScoreByLever($lever)
@@ -52,8 +55,14 @@ class Review extends BaseModel
     public function getService()
     {
         $allServices = get_reviewable_services();
-        $module = $allServices[$this->object_model];
-        return $this->belongsTo($module, 'object_id');
+        $module = $allServices[$this->object_model] ?? null;
+        
+        // If the service type is not registered, return null
+        if (!$module) {
+            return null;
+        }
+        
+        return $this->belongsTo($module, 'object_id')->withDefault();
     }
 
     public function getReviewMeta()

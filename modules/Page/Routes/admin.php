@@ -13,7 +13,13 @@ Route::match(['get'],'/create','PageController@create')->name('page.admin.create
 Route::match(['get'],'/edit/{id}','PageController@edit')->name('page.admin.edit');
 Route::match(['get'],'/builder/{id}','PageController@toBuilder')->name('page.admin.builder');
 
-Route::post('/store/{id}','PageController@store')->name('page.admin.store');
+Route::post('/store/{id?}','PageController@store')->name('page.admin.store');
 
 Route::get('/getForSelect2','PageController@getForSelect2')->name('page.admin.getForSelect2');
 Route::post('/bulkEdit','PageController@bulkEdit')->name('page.admin.bulkEdit');
+
+// New routes for page management
+Route::post('/updateOrder', 'PageController@updateOrder')->name('page.admin.updateOrder');
+Route::post('/{id}/duplicate', 'PageController@duplicate')->name('page.admin.duplicate');
+Route::post('/generate-slug', 'PageController@generateSlug')->name('page.admin.generateSlug');
+

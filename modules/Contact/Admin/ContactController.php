@@ -53,10 +53,12 @@ class ContactController extends AdminController
         if ($request->wantsJson() || $request->expectsJson()) {
             $contacts = $query->with('tour:id,title')->paginate(20);
             
-            // Transform to include tour_name
+            // Transform to include tour_name and destination_name
             $transformed = $contacts->getCollection()->map(function ($contact) {
                 $data = $contact->toArray();
                 $data['tour_name'] = $contact->tour ? $contact->tour->title : null;
+                // destination_name is already in the model, but ensure it's present
+                $data['destination_name'] = $contact->destination_name ?? null;
                 return $data;
             });
             
@@ -101,6 +103,7 @@ class ContactController extends AdminController
         
         $data = $contact->toArray();
         $data['tour_name'] = $contact->tour ? $contact->tour->title : null;
+        $data['destination_name'] = $contact->destination_name ?? null;
         
         return response()->json($data);
     }
@@ -133,6 +136,7 @@ class ContactController extends AdminController
         
         $data = $contact->toArray();
         $data['tour_name'] = $contact->tour ? $contact->tour->title : null;
+        $data['destination_name'] = $contact->destination_name ?? null;
         
         return response()->json([
             'status' => 1,
@@ -211,10 +215,14 @@ class ContactController extends AdminController
     {
         $this->checkPermission('contact_manage');
 
-        $query = Contact::query();
+        $query = Contact::with('tour:id,title');
 
         if ($request->has('status') && $request->status !== 'all') {
             $query->where('status', $request->status);
+        }
+        
+        if ($request->has('form_type') && $request->form_type !== 'all') {
+            $query->where('form_type', $request->form_type);
         }
 
         if ($request->has('s')) {
@@ -226,7 +234,7 @@ class ContactController extends AdminController
             });
         }
 
-        $contacts = $query->get();
+        $contacts = $query->orderBy('created_at', 'desc')->get();
 
         $filename = 'contact_submissions_' . date('Y-m-d') . '.csv';
         $headers = [
@@ -236,7 +244,7 @@ class ContactController extends AdminController
 
         $callback = function() use ($contacts) {
             $file = fopen('php://output', 'w');
-            fputcsv($file, ['ID', 'Name', 'Email', 'Phone', 'Message', 'Status', 'Date']);
+            fputcsv($file, ['ID', 'Name', 'Email', 'Phone', 'Form Type', 'Subject', 'Message', 'Destination', 'Tour', 'Status', 'Notes', 'Date']);
 
             foreach ($contacts as $contact) {
                 fputcsv($file, [
@@ -244,8 +252,13 @@ class ContactController extends AdminController
                     $contact->name,
                     $contact->email,
                     $contact->phone ?? '',
+                    $contact->form_type ?? 'contact',
+                    $contact->subject ?? '',
                     $contact->message,
+                    $contact->destination_name ?? '',
+                    $contact->tour ? $contact->tour->title : '',
                     $contact->status ?? 'new',
+                    $contact->notes ?? '',
                     $contact->created_at->format('Y-m-d H:i:s'),
                 ]);
             }

@@ -24,7 +24,8 @@ class Contact extends BaseModel
         'travel_date',
         'number_of_people',
         'special_requirements',
-        'notes'
+        'notes',
+        'destination_name'
     ];
     
     // Available statuses for form submissions

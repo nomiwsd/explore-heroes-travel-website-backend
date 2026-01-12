@@ -58,19 +58,74 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
         try {
             $review = Review::with(['author', 'service'])->findOrFail($id);
             
+            // Get meta
+            $meta = \DB::table('bc_review_meta')->where('review_id', $review->id)->pluck('val', 'name')->toArray();
+            
             return response()->json([
                 'data' => [
                     'id' => $review->id,
                     'title' => $review->title,
                     'content' => $review->content,
+                    'rating' => $review->rate_number, 
                     'rate_number' => $review->rate_number,
                     'object_id' => $review->object_id,
                     'object_model' => $review->object_model,
                     'status' => $review->status,
+                    'is_featured' => $review->is_featured,
+                    'show_on_homepage' => $review->show_on_homepage,
                     'author' => $review->author,
+                    'author_name' => $meta['author_name'] ?? ($review->author ? $review->author->name : 'Anonymous'),
+                    'author_email' => $meta['author_email'] ?? ($review->author ? $review->author->email : null),
+                    'review_source' => $meta['review_source'] ?? 'website',
                     'service' => $review->service,
                     'created_at' => $review->created_at,
                 ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+
+    // Create review
+    Route::post('/store', function (Request $request) {
+        try {
+            $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+                'title' => 'required',
+                'content' => 'required',
+                'rating' => 'required|numeric',
+                'object_id' => 'required',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['error' => $validator->errors()->first()], 400);
+            }
+
+            $review = new Review([
+                'object_id' => $request->input('object_id'),
+                'object_model' => $request->input('object_model', 'tour'),
+                'title' => $request->input('title'),
+                'content' => $request->input('content'),
+                'rate_number' => $request->input('rating'),
+                'status' => $request->input('status', 'pending'),
+                'is_featured' => $request->input('is_featured', 0),
+                'show_on_homepage' => $request->input('show_on_homepage', 0),
+                'show_on_tour_page' => $request->input('show_on_tour_page', 1),
+                'vendor_id' => 1,
+                'author_id' => auth()->id() ?? 1,
+                'author_ip' => $request->ip(),
+            ]);
+            
+            $review->save();
+            
+            // Meta
+            if ($request->has('author_name')) $review->addMeta('author_name', $request->input('author_name'));
+            if ($request->has('author_email')) $review->addMeta('author_email', $request->input('author_email'));
+            if ($request->has('review_source')) $review->addMeta('review_source', $request->input('review_source'));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Review created successfully',
+                'data' => $review
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -84,10 +139,15 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
             
             $review->title = $request->input('title', $review->title);
             $review->content = $request->input('content', $review->content);
-            $review->rate_number = $request->input('rate_number', $review->rate_number);
+            $review->rate_number = $request->input('rating', $request->input('rate_number', $review->rate_number));
             $review->status = $request->input('status', $review->status);
+            $review->is_featured = $request->input('is_featured', $review->is_featured);
+            $review->show_on_homepage = $request->input('show_on_homepage', $review->show_on_homepage);
             
             $review->save();
+            
+            if ($request->has('author_name')) $review->addMeta('author_name', $request->input('author_name'));
+            if ($request->has('review_source')) $review->addMeta('review_source', $request->input('review_source'));
             
             return response()->json([
                 'success' => true,

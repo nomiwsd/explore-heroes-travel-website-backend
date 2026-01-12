@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\Cache;
 use Modules\AdminController;
 use Modules\Review\Models\Review;
 use Modules\Review\Models\ReviewMeta;
+use Modules\Media\Models\MediaFile;
+use Modules\Tour\Models\Tour;
 
 class ReviewController extends AdminController
 {
@@ -44,6 +46,7 @@ class ReviewController extends AdminController
         }
         $model->whereIn('object_model', $allServicesKeys );
 
+
         // Return JSON for API requests
         if ($request->wantsJson() || $request->expectsJson()) {
             $reviews = $model->with(['author'])->paginate(20);
@@ -64,16 +67,132 @@ class ReviewController extends AdminController
     public function edit(Request $request, $id)
     {
         $this->checkPermission("review_manage_others");
-        $review = Review::with(['author', 'getService'])->findOrFail($id);
+        $review = Review::with(['author'])->findOrFail($id);
         
         // Get review meta
         $meta = ReviewMeta::where('review_id', $id)->get();
-        $reviewData = $review->toArray();
-        $reviewData['meta'] = $meta;
         
-        // Return JSON for API requests
+        // Return JSON for API requests - transform to flat format matching create payload
         if ($request->wantsJson() || $request->expectsJson()) {
-            return response()->json($reviewData);
+            // Build flat response matching create payload format
+            $responseData = [
+                'id' => $review->id,
+                'title' => $review->title,
+                'content' => $review->content,
+                'rating' => $review->rate_number,
+                'status' => $review->status,
+                'object_id' => $review->object_id,
+                'object_model' => $review->object_model,
+                'created_at' => $review->created_at,
+                'updated_at' => $review->updated_at,
+                'author' => $review->author,
+                // Defaults
+                'author_name' => $review->author ? $review->author->name : '',
+                'author_email' => $review->author ? $review->author->email : '',
+                'author_avatar' => '',
+                'author_location' => '',
+                'author_country' => '',
+                'review_source' => 'website',
+                'review_date' => '',
+                'show_on_homepage' => false,
+                'show_on_tour_page' => true,
+                'is_featured' => false,
+                'trip_summary' => '',
+                'agent_name' => '',
+                'agent_role' => '',
+                'agent_photo' => '',
+                'tour_id' => $review->object_model === 'tour' ? $review->object_id : null,
+                'images' => [],
+                'tour' => null,
+            ];
+            
+            // Parse meta into flat properties
+            $imageIds = [];
+            foreach ($meta as $m) {
+                switch ($m->name) {
+                    case 'author_name':
+                        $responseData['author_name'] = $m->val;
+                        break;
+                    case 'author_email':
+                        $responseData['author_email'] = $m->val;
+                        break;
+                    case 'author_avatar':
+                        $responseData['author_avatar'] = $m->val;
+                        break;
+                    case 'author_location':
+                        $responseData['author_location'] = $m->val;
+                        break;
+                    case 'author_country':
+                        $responseData['author_country'] = $m->val;
+                        break;
+                    case 'review_source':
+                        $responseData['review_source'] = $m->val;
+                        break;
+                    case 'review_date':
+                        $responseData['review_date'] = $m->val;
+                        break;
+                    case 'show_on_homepage':
+                        $responseData['show_on_homepage'] = $m->val === '1' || $m->val === 'true';
+                        break;
+                    case 'show_on_tour_page':
+                        $responseData['show_on_tour_page'] = $m->val === '1' || $m->val === 'true';
+                        break;
+                    case 'is_featured':
+                        $responseData['is_featured'] = $m->val === '1' || $m->val === 'true';
+                        break;
+                    case 'trip_summary':
+                        $responseData['trip_summary'] = $m->val;
+                        break;
+                    case 'agent_name':
+                        $responseData['agent_name'] = $m->val;
+                        break;
+                    case 'agent_role':
+                        $responseData['agent_role'] = $m->val;
+                        break;
+                    case 'agent_photo':
+                        $responseData['agent_photo'] = $m->val;
+                        break;
+                    case 'review_image':
+                        $imageIds[] = (int) $m->val;
+                        break;
+                }
+            }
+            
+            // Fetch full image data with URLs
+            if (!empty($imageIds)) {
+                $mediaFiles = MediaFile::whereIn('id', $imageIds)->get();
+                $imagesWithUrls = [];
+                foreach ($imageIds as $imgId) {
+                    $media = $mediaFiles->firstWhere('id', $imgId);
+                    if ($media) {
+                        // Use relative path without localhost
+                        $filePath = $media->file_path;
+                        if (!str_starts_with($filePath, 'uploads/')) {
+                            $filePath = 'uploads/' . $filePath;
+                        }
+                        $imagesWithUrls[] = [
+                            'id' => $media->id,
+                            'url' => $filePath,
+                            'file_path' => $media->file_path,
+                        ];
+                    }
+                }
+                $responseData['images'] = $imagesWithUrls;
+            }
+            
+            // Fetch tour data if object_model is 'tour'
+            if ($review->object_model === 'tour' && $review->object_id) {
+                $tour = Tour::find($review->object_id);
+                if ($tour) {
+                    $responseData['tour'] = [
+                        'id' => $tour->id,
+                        'title' => $tour->title,
+                        'slug' => $tour->slug,
+                    ];
+                }
+            }
+            
+            return response()->json($responseData);
         }
         
         return view('Review::admin.edit', ['row' => $review]);
@@ -199,13 +318,15 @@ class ReviewController extends AdminController
                 $review = Review::where('id', $id)->first();
                 if(!empty($review)){
                     $review->delete();
-                    $review->save();
                     $module_class = $allServices[$review->object_model] ?? false;
                     if(!empty($module_class)){
                         $model_serivce = $module_class::withTrashed()->find($review->object_id);
                         if(!empty($model_serivce)){
-                            Cache::forget('review_' . $model_serivce->type . '_' . $review->object_id);
-                            $model_serivce->update_service_rate();
+                            Cache::forget('review_' . ($model_serivce->type ?? $review->object_model) . '_' . $review->object_id);
+                            // Only call update_service_rate if method exists
+                            if (method_exists($model_serivce, 'update_service_rate')) {
+                                $model_serivce->update_service_rate();
+                            }
                         }
                     }
                 }
@@ -213,14 +334,19 @@ class ReviewController extends AdminController
         } else {
             foreach ($ids as $id) {
                 $review = Review::where('id', $id)->first();
-                $review->status = $action;
-                $review->save();
-                $module_class = $allServices[$review->object_model] ?? false;
-                if(!empty($module_class)){
-                    $model_serivce = $module_class::withTrashed()->find($review->object_id);
-                    if(!empty($model_serivce)){
-                        Cache::forget('review_' . $model_serivce->type . '_' . $review->object_id);
-                        $model_serivce->update_service_rate();
+                if (!empty($review)) {
+                    $review->status = $action;
+                    $review->save();
+                    $module_class = $allServices[$review->object_model] ?? false;
+                    if(!empty($module_class)){
+                        $model_serivce = $module_class::withTrashed()->find($review->object_id);
+                        if(!empty($model_serivce)){
+                            Cache::forget('review_' . ($model_serivce->type ?? $review->object_model) . '_' . $review->object_id);
+                            // Only call update_service_rate if method exists
+                            if (method_exists($model_serivce, 'update_service_rate')) {
+                                $model_serivce->update_service_rate();
+                            }
+                        }
                     }
                 }
             }
