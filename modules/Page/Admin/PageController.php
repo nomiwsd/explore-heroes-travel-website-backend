@@ -26,7 +26,7 @@ class PageController extends AdminController
         if ($page_name) {
             $datapage = Page::where('title', 'LIKE', '%' . $page_name . '%');
         }
-        $datapage = $datapage->orderBy('title', 'asc');
+        $datapage = $datapage->with(['author'])->orderBy('title', 'asc');
 
         // Return JSON for API requests
         if ($request->wantsJson() || $request->expectsJson()) {
@@ -92,7 +92,7 @@ class PageController extends AdminController
         // Return JSON for API requests
         if ($request->wantsJson() || $request->expectsJson()) {
             // Load relationships
-            $row->load(['banner_image', 'image']);
+            $row->load(['banner_image', 'image', 'author']);
             
             // Process image URLs
             $data = $row->toArray();

@@ -125,4 +125,8 @@ class Page extends BaseModel
         return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'image_id');
     }
 
+    public function author()
+    {
+        return $this->belongsTo(\App\User::class, 'create_user', 'id')->withDefault();
+    }
 }
