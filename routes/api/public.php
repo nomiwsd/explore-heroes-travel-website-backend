@@ -491,6 +491,12 @@ Route::prefix('tours')->group(function () {
                     'enable_fixed_date' => $tour->enable_fixed_date,
                     'min_day_before_booking' => $tour->min_day_before_booking,
                     'review_score' => $tour->review_score,
+                    'tour_expert' => $tour->tourExpert ? [
+                        'id' => (int) $tour->tourExpert->id,
+                        'name' => $tour->tourExpert->getDisplayName() ?? $tour->tourExpert->name ?? $tour->tourExpert->first_name,
+                        'email' => $tour->tourExpert->email ?? '',
+                        'avatar' => $tour->tourExpert->avatar_id ? get_file_url($tour->tourExpert->avatar_id, 'thumb') : null,
+                    ] : null,
                     'author' => $tour->author ? [
                         'id' => $tour->author->id,
                         'name' => $tour->author->getDisplayName() ?? $tour->author->name ?? $tour->author->first_name,

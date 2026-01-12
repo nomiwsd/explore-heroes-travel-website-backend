@@ -85,88 +85,141 @@ Route::prefix('module/tour')->group(function () {
     // Get single tour for editing
     Route::get('/edit/{id}', function ($id) {
         try {
-            $tour = Tour::with(['location', 'category_tour'])->findOrFail($id);
+            $tour = Tour::with(['location', 'category_tour', 'tourExpert'])->findOrFail($id);
+            
+            // Helper to ensure array type
+            $toArray = fn($value) => is_array($value) ? $value : (
+                is_string($value) && !empty($value) ? json_decode($value, true) ?? [] : []
+            );
+            
+            // Merge old fields into new format (inclusions takes priority over include)
+            $inclusions = $toArray($tour->inclusions);
+            if (empty($inclusions)) {
+                $inclusions = $toArray($tour->include);
+            }
+            
+            $exclusions = $toArray($tour->exclusions);
+            if (empty($exclusions)) {
+                $exclusions = $toArray($tour->exclude);
+            }
+            
+            $highlights = $toArray($tour->highlights);
+            if (empty($highlights)) {
+                $highlights = $toArray($tour->highlight);
+            }
+            
+            // Get tour expert data
+            $tourExpert = null;
+            if ($tour->tour_expert_id && $tour->tourExpert) {
+                $tourExpert = [
+                    'id' => (int) $tour->tourExpert->id,
+                    'name' => $tour->tourExpert->getDisplayName() ?? $tour->tourExpert->name ?? $tour->tourExpert->first_name,
+                    'email' => $tour->tourExpert->email ?? '',
+                    'avatar' => $tour->tourExpert->avatar_id ? get_file_url($tour->tourExpert->avatar_id, 'thumb') : null,
+                ];
+            }
             
             return response()->json([
                 'data' => [
-                    'id' => $tour->id,
-                    'title' => $tour->title,
-                    'slug' => $tour->slug,
-                    'content' => $tour->content,
-                    'short_desc' => $tour->short_desc,
-                    'image_id' => $tour->image_id,
-                    'image_url' => $tour->image_id ? get_file_url($tour->image_id, 'full') : null,
-                    'banner_image_id' => $tour->banner_image_id,
-                    'banner_image_url' => $tour->banner_image_id ? get_file_url($tour->banner_image_id, 'full') : null,
-                    'gallery' => $tour->gallery,
-                    'video' => $tour->video,
-                    'price' => $tour->price,
-                    'sale_price' => $tour->sale_price,
-                    'duration' => $tour->duration,
-                    'duration_type' => $tour->duration_type ?? 'days',
-                    'nights' => $tour->nights,
-                    'tour_type' => $tour->tour_type,
-                    'max_people' => $tour->max_people,
-                    'min_people' => $tour->min_people,
-                    'pricing_type' => $tour->pricing_type ?? 'per_person',
-                    'group_price' => $tour->group_price,
-                    'child_price' => $tour->child_price,
-                    'suitable_for' => $tour->suitable_for,
-                    'tour_themes' => $tour->tour_themes,
-                    'cities_covered' => $tour->cities_covered,
-                    'summary_inclusions' => $tour->summary_inclusions,
-                    'tour_expert_id' => $tour->tour_expert_id,
-                    'category_id' => $tour->category_id,
+                    // Basic Info
+                    'id' => (int) $tour->id,
+                    'title' => $tour->title ?? '',
+                    'slug' => $tour->slug ?? '',
+                    'content' => $tour->content ?? '',
+                    'short_desc' => $tour->short_desc ?? '',
+                    'status' => $tour->status ?? 'draft',
+                    'is_featured' => (int) ($tour->is_featured ?? 0),
+                    
+                    // Category & Location (ensure integers for Select components)
+                    'category_id' => $tour->category_id ? (int) $tour->category_id : null,
                     'category_name' => $tour->category_tour ? $tour->category_tour->name : null,
-                    'location_id' => $tour->location_id,
+                    'location_id' => $tour->location_id ? (int) $tour->location_id : null,
                     'location_name' => $tour->location ? $tour->location->name : null,
-                    'address' => $tour->address,
-                    'map_lat' => $tour->map_lat,
-                    'map_lng' => $tour->map_lng,
-                    'map_zoom' => $tour->map_zoom,
-                    'map_image_id' => $tour->map_image_id,
+                    
+                    // Pricing (ensure proper number types)
+                    'price' => (float) ($tour->price ?? 0),
+                    'sale_price' => (float) ($tour->sale_price ?? 0),
+                    'pricing_type' => $tour->pricing_type ?? 'per_person',
+                    'group_price' => (float) ($tour->group_price ?? 0),
+                    'child_price' => (float) ($tour->child_price ?? 0),
+                    
+                    // Duration & Capacity
+                    'duration' => (int) ($tour->duration ?? 1),
+                    'duration_type' => $tour->duration_type ?? 'days',
+                    'nights' => (int) ($tour->nights ?? 0),
+                    'tour_type' => $tour->tour_type ?? '',
+                    'min_people' => (int) ($tour->min_people ?? 1),
+                    'max_people' => (int) ($tour->max_people ?? 10),
+                    
+                    // New Basic Info Arrays (ensure always arrays)
+                    'suitable_for' => $toArray($tour->suitable_for),
+                    'tour_themes' => $toArray($tour->tour_themes),
+                    'cities_covered' => $toArray($tour->cities_covered),
+                    'summary_inclusions' => $toArray($tour->summary_inclusions),
+                    'tour_expert_id' => $tour->tour_expert_id ? (int) $tour->tour_expert_id : null,
+                    'tour_expert' => $tourExpert,
+                    
+                    // Images
+                    'image_id' => $tour->image_id ? (int) $tour->image_id : null,
+                    'image_url' => $tour->image_id ? get_file_url($tour->image_id, 'full') : null,
+                    'banner_image_id' => $tour->banner_image_id ? (int) $tour->banner_image_id : null,
+                    'banner_image_url' => $tour->banner_image_id ? get_file_url($tour->banner_image_id, 'full') : ($tour->banner_image ? url($tour->banner_image) : null),
+                    'gallery' => $toArray($tour->gallery),
+                    'video' => $tour->video ?? '',
+                    'hero_slider' => $toArray($tour->hero_slider),
+                    
+                    // Location Details
+                    'address' => $tour->address ?? '',
+                    'map_lat' => $tour->map_lat ?? '',
+                    'map_lng' => $tour->map_lng ?? '',
+                    'map_zoom' => (int) ($tour->map_zoom ?? 10),
+                    'map_image_id' => $tour->map_image_id ? (int) $tour->map_image_id : null,
                     'map_image_url' => $tour->map_image_id ? get_file_url($tour->map_image_id, 'full') : null,
-                    'map_embed' => $tour->map_embed,
-                    'status' => $tour->status,
-                    'is_featured' => $tour->is_featured,
-                    'faqs' => $tour->faqs,
-                    'include' => $tour->include,
-                    'exclude' => $tour->exclude,
-                    'inclusions' => $tour->inclusions, // Added
-                    'exclusions' => $tour->exclusions, // Added
-                    'itinerary' => $tour->itinerary,
-                    'highlight' => $tour->highlight,
-                    'highlights' => $tour->highlights, // Added
-                    'surrounding' => $tour->surrounding,
-                    'conditions' => $tour->conditions,
-                    'cancellation_policy' => $tour->cancellation_policy,
-                    'child_policy' => $tour->child_policy,
-                    'payment_terms' => $tour->payment_terms,
-                    'hero_slider' => $tour->hero_slider,
-                    'min_day_before_booking' => $tour->min_day_before_booking,
-                    'enable_fixed_date' => $tour->enable_fixed_date,
+                    'map_embed' => $tour->map_embed ?? '',
+                    
+                    // Content Arrays (using merged values)
+                    'inclusions' => $inclusions,
+                    'exclusions' => $exclusions,
+                    'highlights' => $highlights,
+                    'itinerary' => $toArray($tour->itinerary),
+                    'faqs' => $toArray($tour->faqs),
+                    
+                    // Policies
+                    'conditions' => $tour->conditions ?? '',
+                    'cancellation_policy' => $tour->cancellation_policy ?? '',
+                    'child_policy' => $tour->child_policy ?? '',
+                    'payment_terms' => $tour->payment_terms ?? '',
+                    
+                    // Availability
+                    'min_day_before_booking' => (int) ($tour->min_day_before_booking ?? 0),
+                    'enable_fixed_date' => (int) ($tour->enable_fixed_date ?? 0),
                     'start_date' => $tour->start_date,
                     'end_date' => $tour->end_date,
                     'last_booking_date' => $tour->last_booking_date,
-                    'availability_dates' => $tour->availability_dates,
-                    'related_tour_ids' => $tour->related_tour_ids,
+                    'availability_dates' => $toArray($tour->availability_dates),
+                    'related_tour_ids' => $toArray($tour->related_tour_ids),
+                    
                     // SEO fields
-                    'seo_title' => $tour->seo_title,
-                    'seo_desc' => $tour->seo_desc,
-                    'seo_image' => $tour->seo_image,
+                    'seo_title' => $tour->seo_title ?? '',
+                    'seo_desc' => $tour->seo_desc ?? '',
+                    'seo_image' => $tour->seo_image ?? '',
+                    
                     // OG fields
-                    'og_title' => $tour->og_title,
-                    'og_description' => $tour->og_description,
-                    'og_image' => $tour->og_image,
+                    'og_title' => $tour->og_title ?? '',
+                    'og_description' => $tour->og_description ?? '',
+                    'og_image' => $tour->og_image ?? '',
+                    
                     // Twitter fields
-                    'twitter_card' => $tour->twitter_card,
-                    'twitter_title' => $tour->twitter_title,
-                    'twitter_description' => $tour->twitter_description,
-                    'twitter_image' => $tour->twitter_image,
+                    'twitter_card' => $tour->twitter_card ?? 'summary_large_image',
+                    'twitter_title' => $tour->twitter_title ?? '',
+                    'twitter_description' => $tour->twitter_description ?? '',
+                    'twitter_image' => $tour->twitter_image ?? '',
+                    
+                    // Timestamps & Author
                     'created_at' => $tour->created_at,
                     'updated_at' => $tour->updated_at,
                     'author' => $tour->author ? [
-                        'id' => $tour->author->id,
+                        'id' => (int) $tour->author->id,
                         'name' => $tour->author->getDisplayName() ?? $tour->author->name ?? $tour->author->first_name,
                     ] : null,
                 ],
@@ -185,31 +238,50 @@ Route::prefix('module/tour')->group(function () {
                 $tour = new Tour();
             }
             
-            $tour->fill($request->only([
-                'title', 'content', 'short_desc', 'image_id', 'banner_image_id',
-                'gallery', 'video', 'price', 'sale_price', 'duration', 'nights',
-                'tour_type', 'max_people', 'min_people', 'category_id', 'location_id',
-                'address', 'map_lat', 'map_lng', 'map_zoom', 'map_image_id', 'status',
-                'is_featured', 'faqs', 'include', 'exclude', 'itinerary', 'highlight',
-                'surrounding', 'suitable_for', 'tour_themes', 'cities_covered',
-                'summary_inclusions', 'tour_expert_id', 'conditions', 'cancellation_policy',
-                'child_policy', 'payment_terms', 'hero_slider', 'map_embed',
-                'min_day_before_booking', 'enable_fixed_date',
-                'start_date', 'end_date', 'last_booking_date',
-                'duration_type', 'pricing_type', 'group_price', 'child_price',
-                'seo_title', 'seo_desc', 'seo_image', 'seo_share',
+            // Define allowed fields (only new field names, no duplicates)
+            $allowedFields = [
+                // Basic Info
+                'title', 'slug', 'content', 'short_desc', 'status', 'is_featured',
+                // Category & Location
+                'category_id', 'location_id',
+                // Pricing
+                'price', 'sale_price', 'pricing_type', 'group_price', 'child_price',
+                // Duration & Capacity
+                'duration', 'duration_type', 'nights', 'tour_type', 'min_people', 'max_people',
+                // New Arrays
+                'suitable_for', 'tour_themes', 'cities_covered', 'summary_inclusions', 'tour_expert_id',
+                // Images
+                'image_id', 'banner_image_id', 'banner_image_url', 'gallery', 'video', 'hero_slider',
+                // Location Details
+                'address', 'map_lat', 'map_lng', 'map_zoom', 'map_image_id', 'map_embed',
+                // Content (new field names only)
+                'inclusions', 'exclusions', 'highlights', 'itinerary', 'faqs',
+                // Policies
+                'conditions', 'cancellation_policy', 'child_policy', 'payment_terms',
+                // Availability
+                'min_day_before_booking', 'enable_fixed_date', 'start_date', 'end_date', 'last_booking_date',
+                'availability_dates', 'related_tour_ids',
+                // SEO
+                'seo_title', 'seo_desc', 'seo_image',
+                // OG
                 'og_title', 'og_description', 'og_image',
+                // Twitter
                 'twitter_card', 'twitter_title', 'twitter_description', 'twitter_image',
-                'availability_dates', 'related_tour_ids', 'inclusions', 'exclusions', 'highlights'
-            ]));
+            ];
             
-            $tour->create_user = $request->user()->id ?? 1;
+            $tour->fill($request->only($allowedFields));
+            
+            // Set author for new tours
+            if (!$id) {
+                $tour->create_user = $request->user()->id ?? 1;
+            }
+            
             $tour->save();
             
             return response()->json([
                 'success' => true,
                 'message' => $id ? 'Tour updated successfully' : 'Tour created successfully',
-                'data' => ['id' => $tour->id],
+                'data' => ['id' => (int) $tour->id],
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);

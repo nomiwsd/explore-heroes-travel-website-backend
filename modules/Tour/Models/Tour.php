@@ -36,9 +36,11 @@ class Tour extends BaseModel
     protected $fillable                           = [
         //Tour info
         'title',
+        'slug',
         'content',
         'image_id',
         'banner_image_id',
+        'banner_image_url',
         'short_desc',
         'category_id',
         'location_id',
@@ -160,6 +162,11 @@ class Tour extends BaseModel
     public function location()
     {
         return $this->belongsTo(\Modules\Location\Models\Location::class, 'location_id');
+    }
+
+    public function tourExpert()
+    {
+        return $this->belongsTo(\App\User::class, 'tour_expert_id');
     }
 
     public function category()
