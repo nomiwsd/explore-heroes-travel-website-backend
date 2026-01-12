@@ -314,6 +314,7 @@ Route::prefix('tours')->group(function () {
                         'nights' => $tour->nights, // Updated to use nights column
                         'duration_nights' => $tour->nights, // Legacy support
                         'image_url' => $tour->image_id ? get_file_url($tour->image_id, 'full') : null,
+                        'banner_url' => $tour->banner_image_url ? $tour->banner_image_url : ($tour->banner_image_id ? get_file_url($tour->banner_image_id, 'full') : null),
                         'is_featured' => $tour->is_featured,
                         'tour_type' => $tour->tour_type,
                         'pricing_type' => $tour->pricing_type,
@@ -436,7 +437,7 @@ Route::prefix('tours')->group(function () {
                     'tour_type' => $tour->tour_type,
                     'pricing_type' => $tour->pricing_type,
                     'image_url' => $tour->image_id ? get_file_url($tour->image_id, 'full') : null,
-                    'banner_url' => $tour->banner_image_id ? get_file_url($tour->banner_image_id, 'full') : null,
+                    'banner_url' => $tour->banner_image_url ? $tour->banner_image_url : ($tour->banner_image_id ? get_file_url($tour->banner_image_id, 'full') : null),
                     'video_url' => $tour->video,
                     'map_lat' => $tour->map_lat,
                     'map_lng' => $tour->map_lng,
