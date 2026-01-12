@@ -117,7 +117,10 @@ Route::prefix('module/core/menu')->group(function () {
             
             switch ($action) {
                 case 'delete':
-                    Menu::whereIn('id', $ids)->delete();
+                    $items = Menu::whereIn('id', $ids)->get();
+                    foreach ($items as $item) {
+                       $item->delete(); // This triggers the 'deleted' event to clear cache
+                    }
                     break;
                 case 'publish':
                     Menu::whereIn('id', $ids)->update(['status' => 'publish']);
