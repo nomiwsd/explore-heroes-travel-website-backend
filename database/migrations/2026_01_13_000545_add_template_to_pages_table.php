@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::table('core_pages', function (Blueprint $table) {
-            $table->string('template')->nullable();
-        });
+        if (!Schema::hasColumn('core_pages', 'template')) {
+            Schema::table('core_pages', function (Blueprint $table) {
+                $table->string('template')->nullable();
+            });
+        }
     }
 
     /**
@@ -23,8 +25,10 @@ return new class extends Migration
      */
     public function down()
     {
-        Schema::table('core_pages', function (Blueprint $table) {
-            $table->dropColumn('template');
-        });
+        if (Schema::hasColumn('core_pages', 'template')) {
+            Schema::table('core_pages', function (Blueprint $table) {
+                $table->dropColumn('template');
+            });
+        }
     }
 };
