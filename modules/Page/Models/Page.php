@@ -12,6 +12,11 @@ class Page extends BaseModel
 {
     use SoftDeletes;
 
+    public function author()
+    {
+        return $this->belongsTo(\App\User::class, 'create_user', 'id');
+    }
+
     protected $table = 'core_pages';
     protected $fillable = [
         'title',
@@ -32,7 +37,8 @@ class Page extends BaseModel
         'meta_desc',
         'meta_keywords',
         'is_homepage',
-        'template_id'
+        'template_id',
+        'template'
     ];
     protected $slugField     = 'slug';
     protected $slugFromField = 'title';
@@ -125,8 +131,4 @@ class Page extends BaseModel
         return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'image_id');
     }
 
-    public function author()
-    {
-        return $this->belongsTo(\App\User::class, 'create_user', 'id')->withDefault();
-    }
 }

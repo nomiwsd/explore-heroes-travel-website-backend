@@ -300,6 +300,9 @@ class BaseModel extends Model
 
     public static function boot() {
         parent::boot();
+        static::saved(function($table)  {
+            Cache::forget($table->cacheKey() . ':' . $table->id);
+        });
         static::deleted(function($table)  {
 //            clear cache
             Cache::forget($table->cacheKey() . ':' . $table->id);

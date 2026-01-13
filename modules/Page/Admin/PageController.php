@@ -113,6 +113,13 @@ class PageController extends AdminController
                 ];
             }
             
+            if ($row->author) {
+                $data['author'] = [
+                    'id' => $row->author->id,
+                    'name' => $row->author->name, // Or whatever name field is used
+                ];
+            }
+            
             return response()->json([
                 'data' => $data,
                 'translation' => $translation
@@ -140,6 +147,7 @@ class PageController extends AdminController
 
     public function store(Request $request, $id = -1)
     {
+        \Illuminate\Support\Facades\Log::info('Page Store Request Data:', $request->all());
 
         if (is_demo_mode()) {
             if ($request->wantsJson()) {
@@ -166,6 +174,8 @@ class PageController extends AdminController
         if ($request->input('slug')) {
             $row->slug = $request->input('slug');
         }
+
+        $row->save();
 
         do_action(Hook::PAGE_BEFORE_SAVING, $row, $request);
         $row->saveOriginOrTranslation($request->query('lang'), true);
