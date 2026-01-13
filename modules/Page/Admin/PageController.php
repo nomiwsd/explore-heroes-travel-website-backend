@@ -94,8 +94,39 @@ class PageController extends AdminController
             // Load relationships
             $row->load(['banner_image', 'image', 'author']);
             
-            // Process image URLs
-            $data = $row->toArray();
+            // Build explicit response with all fields
+            $data = [
+                'id' => $row->id,
+                'slug' => $row->slug,
+                'title' => $row->title,
+                'meta_title' => $row->meta_title ?? '',
+                'meta_desc' => $row->meta_desc ?? '',
+                'meta_keywords' => $row->meta_keywords ?? '',
+                'content' => $row->content ?? '',
+                'short_desc' => $row->short_desc ?? '',
+                'status' => $row->status ?? 'draft',
+                'is_homepage' => (bool) $row->is_homepage,
+                'image_id' => $row->image_id,
+                'template_id' => $row->template_id,
+                'template' => $row->template ?? 'default',
+                'header_style' => $row->header_style ?? 'normal',
+                'custom_logo' => $row->custom_logo ?? '',
+                'banner_title' => $row->banner_title ?? '',
+                'banner_image_id' => $row->banner_image_id,
+                'display_order' => (int) ($row->display_order ?? 0),
+                'show_in_menu' => (bool) $row->show_in_menu,
+                'show_in_header' => (bool) $row->show_in_header,
+                'show_in_footer' => (bool) $row->show_in_footer,
+                'create_user' => $row->create_user,
+                'update_user' => $row->update_user,
+                'deleted_at' => $row->deleted_at,
+                'origin_id' => $row->origin_id,
+                'lang' => $row->lang,
+                'created_at' => $row->created_at,
+                'updated_at' => $row->updated_at,
+            ];
+
+            // Add banner image 
             if ($row->banner_image) {
                 $data['banner_image'] = [
                     'id' => $row->banner_image->id,
@@ -103,7 +134,11 @@ class PageController extends AdminController
                     'url' => get_file_url($row->banner_image->file_path, 'full'),
                     'alt_text' => $row->banner_image->alt_text ?? '',
                 ];
+            } else {
+                $data['banner_image'] = null;
             }
+            
+            // Add image
             if ($row->image) {
                 $data['image'] = [
                     'id' => $row->image->id,
@@ -111,13 +146,18 @@ class PageController extends AdminController
                     'url' => get_file_url($row->image->file_path, 'full'),
                     'alt_text' => $row->image->alt_text ?? '',
                 ];
+            } else {
+                $data['image'] = null;
             }
             
+            // Add author
             if ($row->author) {
                 $data['author'] = [
                     'id' => $row->author->id,
-                    'name' => $row->author->name, // Or whatever name field is used
+                    'name' => $row->author->name,
                 ];
+            } else {
+                $data['author'] = null;
             }
             
             return response()->json([
