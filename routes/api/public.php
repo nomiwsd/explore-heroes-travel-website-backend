@@ -306,18 +306,74 @@ Route::get('/tour-facilities', function () {
 // =====================================================
 Route::prefix('tours')->group(function () {
     // Get all published tours
+    // Get all published tours
     Route::get('/', function (Request $request) {
         try {
             $query = Tour::where('status', 'publish');
             
             // Filter by destination
-            if ($request->has('destination_id')) {
-                $query->where('location_id', $request->destination_id);
+            if ($request->has('destination_id') && $request->destination_id) {
+                $destIds = is_array($request->destination_id) ? $request->destination_id : explode(',', $request->destination_id);
+                $query->whereIn('location_id', $destIds);
             }
             
-            // Filter by category
-            if ($request->has('category_id')) {
-                $query->where('category_id', $request->category_id);
+            // Filter by category (Multi-category support)
+            if ($request->has('category_id') && $request->category_id) {
+                $catIds = is_array($request->category_id) ? $request->category_id : explode(',', $request->category_id);
+                 $query->where(function($q) use ($catIds) {
+                     foreach($catIds as $catId) {
+                         $id = (int)$catId;
+                         // Check either JSON contains exact ID (integer or string representation)
+                         // OR legacy handling or partial string match
+                         $q->orWhereRaw("JSON_CONTAINS(category_ids, '$id')")
+                           ->orWhere('category_ids', 'LIKE', "%\"$id\"%")
+                           ->orWhere('category_ids', 'LIKE', "%$id%"); 
+                     }
+                 });
+            }
+            
+            // Filter by tour_type
+            if ($request->has('tour_type') && $request->tour_type) {
+                if (is_array($request->tour_type)) {
+                     $query->whereIn('tour_type', $request->tour_type);
+                } else {
+                     $query->where('tour_type', $request->tour_type);
+                }
+            }
+
+            // Filter by themes (terms)
+            if ($request->has('terms') && $request->terms) {
+                $terms = is_array($request->terms) ? $request->terms : explode(',', $request->terms);
+                $query->where(function($q) use ($terms) {
+                    foreach($terms as $term) {
+                        $termId = (int)$term;
+                         $q->orWhereRaw("JSON_CONTAINS(tour_themes, '$termId')")
+                           ->orWhere('tour_themes', 'LIKE', "%\"$termId\"%");
+                    }
+                });
+            }
+
+            // Filter by duration (Days Range)
+            if ($request->has('duration_min') || $request->has('duration_max')) {
+                 if ($request->has('duration_min')) {
+                     $query->where('duration', '>=', $request->duration_min);
+                 }
+                 if ($request->has('duration_max')) {
+                     $query->where('duration', '<=', $request->duration_max);
+                 }
+            }
+
+            // Filter by price
+            if ($request->has('price_range') && $request->price_range) {
+                $parts = explode(';', $request->price_range); // 0;1000
+                if (count($parts) === 2) {
+                    $min = (float)$parts[0];
+                    $max = (float)$parts[1];
+                     $query->where(function($q) use ($min, $max) {
+                         $q->whereBetween('price', [$min, $max])
+                           ->orWhereBetween('sale_price', [$min, $max]);
+                     });
+                }
             }
             
             // Filter by featured
@@ -338,6 +394,24 @@ Route::prefix('tours')->group(function () {
             
             return response()->json([
                 'data' => $tours->map(function ($tour) {
+                    // Fetch categories
+                    $categories = collect([]);
+                     if (!empty($tour->category_ids)) {
+                         $catIds = is_string($tour->category_ids) ? json_decode($tour->category_ids, true) : $tour->category_ids;
+                         if (is_array($catIds) && count($catIds) > 0) {
+                             $categories = \Modules\Tour\Models\TourCategory::whereIn('id', $catIds)->select('id', 'name', 'slug')->get();
+                         }
+                     }
+
+                     // Fetch themes
+                     $themes = collect([]);
+                     if (!empty($tour->tour_themes)) {
+                         $themeIds = is_string($tour->tour_themes) ? json_decode($tour->tour_themes, true) : $tour->tour_themes;
+                         if (is_array($themeIds) && count($themeIds) > 0) {
+                             $themes = \DB::table('bc_terms')->whereIn('id', $themeIds)->select('id', 'name', 'slug', 'icon')->get();
+                         }
+                     }
+
                     return [
                         'id' => $tour->id,
                         'title' => $tour->title,
@@ -360,10 +434,10 @@ Route::prefix('tours')->group(function () {
                             'name' => $tour->location->name,
                             'slug' => $tour->location->slug,
                         ] : null,
-                        'category' => $tour->category ? [
-                            'id' => $tour->category->id,
-                            'name' => $tour->category->name,
-                        ] : null,
+                        'categories' => $categories,
+                        'tour_themes' => $themes,
+                        // Legacy single category for compatibility (optional)
+                        'category' => $categories->first() ?? null, 
                     ];
                 }),
                 'current_page' => $tours->currentPage(),
