@@ -1084,25 +1084,44 @@ Route::prefix('news')->group(function () {
             };
             
             // Get related posts
-            $related = \Modules\News\Models\News::where('status', 'publish')
-                ->where('id', '!=', $post->id)
-                ->when($post->cat_id, function ($q) use ($post) {
-                    return $q->where('cat_id', $post->cat_id);
-                })
-                ->orderBy('id', 'desc')
-                ->limit(4)
-                ->get()
-                ->map(function ($p) use ($getImageUrl) {
-                    return [
-                        'id' => $p->id,
-                        'title' => $p->title,
-                        'slug' => $p->slug,
-                        'excerpt' => $p->excerpt,
-                        'image_url' => $getImageUrl($p->image_id),
-                        'created_at' => $p->created_at,
-                        'publish_date' => $p->created_at ? $p->created_at->format('Y-m-d') : null,
-                    ];
-                });
+            $relatedPostsResolved = [];
+            
+            // 1. Try to get manually assigned related posts IDs
+            $manualRelatedIds = $post->related_posts;
+            if (is_string($manualRelatedIds)) {
+                $manualRelatedIds = json_decode($manualRelatedIds, true);
+            }
+            
+            if (!empty($manualRelatedIds) && is_array($manualRelatedIds)) {
+                $relatedPostsResolved = \Modules\News\Models\News::where('status', 'publish')
+                    ->whereIn('id', $manualRelatedIds)
+                    ->get();
+            }
+            
+            // 2. Fallback to Category-based related posts if manual list is empty
+            if (empty($relatedPostsResolved) || $relatedPostsResolved->isEmpty()) {
+                $relatedPostsResolved = \Modules\News\Models\News::where('status', 'publish')
+                    ->where('id', '!=', $post->id)
+                    ->when($post->cat_id, function ($q) use ($post) {
+                        return $q->where('cat_id', $post->cat_id);
+                    })
+                    ->orderBy('id', 'desc')
+                    ->limit(4)
+                    ->get();
+            }
+
+            // 3. Map to output format
+            $related = $relatedPostsResolved->map(function ($p) use ($getImageUrl) {
+                return [
+                    'id' => $p->id,
+                    'title' => $p->title,
+                    'slug' => $p->slug,
+                    'excerpt' => $p->excerpt,
+                    'image_url' => $getImageUrl($p->image_id),
+                    'created_at' => $p->created_at,
+                    'publish_date' => $p->created_at ? $p->created_at->format('Y-m-d') : null,
+                ];
+            });
             
             return response()->json([
                 'data' => [
