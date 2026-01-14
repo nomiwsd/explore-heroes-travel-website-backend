@@ -57,7 +57,7 @@ Route::prefix('module/tour')->group(function () {
                     'duration' => $tour->duration,
                     'nights' => $tour->nights, // Added
                     'tour_type' => $tour->tour_type, // Added
-                    'gallery_count' => is_array($tour->gallery) ? count($tour->gallery) : 0, // Added
+                    'hero_slider_count' => is_array($tour->hero_slider) ? count($tour->hero_slider) : 0, // Added to replace gallery_count
                     'itinerary_count' => is_array($tour->itinerary) ? count($tour->itinerary) : 0, // Added
                     'status' => $tour->status,
                     'is_featured' => $tour->is_featured,
@@ -125,14 +125,12 @@ Route::prefix('module/tour')->group(function () {
                     'id' => (int) $tour->id,
                     'title' => $tour->title ?? '',
                     'slug' => $tour->slug ?? '',
-                    'content' => $tour->content ?? '',
                     'short_desc' => $tour->short_desc ?? '',
                     'status' => $tour->status ?? 'draft',
                     'is_featured' => (int) ($tour->is_featured ?? 0),
                     
                     // Category & Location (ensure integers for Select components)
-                    'category_id' => $tour->category_id ? (int) $tour->category_id : null,
-                    'category_name' => $tour->category_tour ? $tour->category_tour->name : null,
+                    'category_ids' => $toArray($tour->category_ids),
                     'location_id' => $tour->location_id ? (int) $tour->location_id : null,
                     'location_name' => $tour->location ? $tour->location->name : null,
                     
@@ -155,7 +153,7 @@ Route::prefix('module/tour')->group(function () {
                     'suitable_for' => $toArray($tour->suitable_for),
                     'tour_themes' => $toArray($tour->tour_themes),
                     'cities_covered' => $toArray($tour->cities_covered),
-                    'summary_inclusions' => $toArray($tour->summary_inclusions),
+               
                     'tour_expert_id' => $tour->tour_expert_id ? (int) $tour->tour_expert_id : null,
                     'tour_expert' => $tourExpert,
                     
@@ -164,8 +162,7 @@ Route::prefix('module/tour')->group(function () {
                     'image_url' => $tour->image_id ? get_file_url($tour->image_id, 'full') : null,
                     'banner_image_id' => $tour->banner_image_id ? (int) $tour->banner_image_id : null,
                     'banner_image_url' => $tour->banner_image_id ? get_file_url($tour->banner_image_id, 'full') : ($tour->banner_image ? url($tour->banner_image) : null),
-                    'gallery' => $toArray($tour->gallery),
-                    'video' => $tour->video ?? '',
+                    
                     'hero_slider' => $toArray($tour->hero_slider),
                     
                     // Location Details
@@ -241,17 +238,17 @@ Route::prefix('module/tour')->group(function () {
             // Define allowed fields (only new field names, no duplicates)
             $allowedFields = [
                 // Basic Info
-                'title', 'slug', 'content', 'short_desc', 'status', 'is_featured',
+                'title', 'slug', 'short_desc', 'status', 'is_featured',
                 // Category & Location
-                'category_id', 'location_id',
+                'category_ids', 'location_id',
                 // Pricing
                 'price', 'sale_price', 'pricing_type', 'group_price', 'child_price',
                 // Duration & Capacity
                 'duration', 'duration_type', 'nights', 'tour_type', 'min_people', 'max_people',
                 // New Arrays
-                'suitable_for', 'tour_themes', 'cities_covered', 'summary_inclusions', 'tour_expert_id',
+                'suitable_for', 'tour_themes', 'cities_covered', 'tour_expert_id',
                 // Images
-                'image_id', 'banner_image_id', 'banner_image_url', 'gallery', 'video', 'hero_slider',
+                'image_id', 'banner_image_id', 'banner_image_url', 'hero_slider',
                 // Location Details
                 'address', 'map_lat', 'map_lng', 'map_zoom', 'map_image_id', 'map_embed',
                 // Content (new field names only)
