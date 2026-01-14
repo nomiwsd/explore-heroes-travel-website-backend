@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\PageSetting;
+use Modules\Page\Models\Page;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -92,6 +93,11 @@ class PageSettingsController extends Controller
 
         $setting->save();
 
+        // Sync to core Page model if not a draft
+        if (!$request->get('save_as_draft', false)) {
+            $this->syncToPageModel($setting);
+        }
+
         return response()->json([
             'message' => $request->get('save_as_draft') ? 'Draft saved' : 'Settings updated',
             'data' => $setting,
@@ -110,6 +116,9 @@ class PageSettingsController extends Controller
         }
 
         $setting->publish();
+        
+        // Sync to core Page model
+        $this->syncToPageModel($setting);
 
         return response()->json([
             'message' => 'Published successfully',
@@ -154,5 +163,41 @@ class PageSettingsController extends Controller
         }
 
         return response()->json(['valid' => true]);
+    }
+
+    /**
+     * Sync PageSettings data to the core Page model content
+     */
+    private function syncToPageModel($setting)
+    {
+        try {
+            $slug = $setting->page_slug;
+            
+            // Find the page model
+            $query = Page::query();
+            if ($slug === 'home') {
+                $page = Page::where('is_homepage', true)->first();
+                if (!$page) {
+                    $page = Page::where('slug', 'home')->first();
+                }
+            } else {
+                $page = Page::where('slug', $slug)->first();
+            }
+
+            if ($page) {
+                // Get ordered sections and flatten to array
+                $sections = array_values($setting->getOrderedSections(false));
+                
+                // Save as JSON string
+                $page->content = json_encode($sections);
+                $page->save();
+                
+                \Log::info("Synced PageSettings to Page model for slug: {$slug}");
+            } else {
+                 \Log::warning("Could not find Page model to sync for slug: {$slug}");
+            }
+        } catch (\Exception $e) {
+            \Log::error("Failed to sync PageSettings to Page: " . $e->getMessage());
+        }
     }
 }
