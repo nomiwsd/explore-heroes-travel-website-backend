@@ -475,8 +475,8 @@ Route::prefix('tours')->group(function () {
             
             // Get highlights (Prioritize new column)
             $highlights = [];
-            if ($tour->highlights && count($tour->highlights) > 0) {
-                $highlights = $tour->highlights;
+            if (!empty($tour->highlights)) {
+                 $highlights = is_string($tour->highlights) ? json_decode($tour->highlights, true) : $tour->highlights;
             } elseif ($tour->highlight) {
                 $highlights = is_string($tour->highlight) ? json_decode($tour->highlight, true) : $tour->highlight;
             }
@@ -519,15 +519,39 @@ Route::prefix('tours')->group(function () {
                  }
             }
             
-            // Get related tours (Updated with new fields)
-            $relatedTours = Tour::where('status', 'publish')
-                ->where('id', '!=', $tour->id)
-                ->where(function($q) use ($tour) {
-                    $q->where('location_id', $tour->location_id)
-                      ->orWhere('category_id', $tour->category_id);
-                })
-                ->limit(4)
-                ->get();
+            // Fetch categories (Hydrate full objects from IDs)
+            $categories = collect([]);
+            if (!empty($tour->category_ids)) {
+                $catIds = is_string($tour->category_ids) ? json_decode($tour->category_ids, true) : $tour->category_ids;
+                if (is_array($catIds) && count($catIds) > 0) {
+                    $categories = \Modules\Tour\Models\TourCategory::whereIn('id', $catIds)->select('id', 'name', 'slug')->get();
+                }
+            }
+
+            // Prepare Tour Themes IDs for hydration
+            $tourThemesIds = [];
+            if (!empty($tour->tour_themes)) {
+                $tourThemesIds = is_string($tour->tour_themes) ? json_decode($tour->tour_themes, true) : $tour->tour_themes;
+            }
+
+            // Get related tours (Prioritize manual related_tour_ids)
+            $relatedTourIds = [];
+            if (!empty($tour->related_tour_ids)) {
+                $relatedTourIds = is_string($tour->related_tour_ids) ? json_decode($tour->related_tour_ids, true) : $tour->related_tour_ids;
+            }
+
+            $relatedToursQuery = Tour::where('status', 'publish')->where('id', '!=', $tour->id);
+            
+            if (!empty($relatedTourIds) && is_array($relatedTourIds) && count($relatedTourIds) > 0) {
+                $relatedToursQuery->whereIn('id', $relatedTourIds);
+            } else {
+                $relatedToursQuery->where(function($q) use ($tour) {
+                    $q->where('location_id', $tour->location_id);
+                      // ->orWhere('category_id', $tour->category_id); // Deprecated single category check
+                });
+            }
+            
+            $relatedTours = $relatedToursQuery->limit(4)->get();
             
             return response()->json([
                 'data' => [
@@ -538,40 +562,38 @@ Route::prefix('tours')->group(function () {
                     'price' => $tour->price,
                     'sale_price' => $tour->sale_price,
                     'duration' => $tour->duration,
-                    'nights' => $tour->nights, // Updated
-                    'duration_nights' => $tour->nights,
+                    'nights' => $tour->nights, // Frontend uses nights or duration (frontend interface has duration_nights but mapped to nights)
+                    // duration_nights removed (redundant)
                     'group_size' => $tour->max_people,
                     'min_people' => $tour->min_people,
                     'tour_type' => $tour->tour_type,
                     'pricing_type' => $tour->pricing_type,
-                    'image_url' => $tour->image_id ? get_file_url($tour->image_id, 'full') : null,
-                    'banner_url' => $tour->banner_image_url ? $tour->banner_image_url : ($tour->banner_image_id ? get_file_url($tour->banner_image_id, 'full') : null),
+                    'image_url' => $tour->image_id ? parse_url(get_file_url($tour->image_id, 'full'), PHP_URL_PATH) : null,
+                    'banner_url' => $tour->banner_image_url ? parse_url($tour->banner_image_url, PHP_URL_PATH) : ($tour->banner_image_id ? parse_url(get_file_url($tour->banner_image_id, 'full'), PHP_URL_PATH) : null),
                     'map_lat' => $tour->map_lat,
                     'map_lng' => $tour->map_lng,
-                    'map_embed' => $tour->map_embed,
+                    'map_zoom' => $tour->map_zoom,
+                    // map_embed removed
+                    'map_image_url' => $tour->map_image_id ? parse_url(get_file_url($tour->map_image_id, 'full'), PHP_URL_PATH) : null,
                     'is_featured' => $tour->is_featured,
                     'destination' => $tour->location ? [
                         'id' => $tour->location->id,
                         'name' => $tour->location->name,
                         'slug' => $tour->location->slug,
+                        'image_url' => $tour->location->image_id ? get_file_url($tour->location->image_id, 'full') : null,
                     ] : null,
-                    'category' => $tour->category ? [
-                        'id' => $tour->category->id,
-                        'name' => $tour->category->name,
-                        'slug' => $tour->category->slug,
-                    ] : null,
-                    'gallery' => $gallery,
+                    'categories' => $categories, 
+                    // gallery removed
                     'hero_slider' => $hero_slider,
                     'itinerary' => $itinerary,
-                    'include' => $include, // inclusions (structured)
-                    'exclude' => $exclude, // exclusions (structured)
-                    'inclusions' => $tour->inclusions ?? $include, // arrays
-                    'exclusions' => $tour->exclusions ?? $exclude, // arrays
+                    // include/exclude removed (raw), use inclusions/exclusions
+                    'inclusions' => $tour->inclusions ?? $include, 
+                    'exclusions' => $tour->exclusions ?? $exclude, 
                     'highlights' => $highlights,
                     'faqs' => $faqs,
-                    'tour_themes' => collect($tour->tour_themes ?? [])->map(function($id) {
+                    'tour_themes' => collect($tourThemesIds ?? [])->map(function($id) {
                         $term = \DB::table('bc_terms')->where('id', $id)->first();
-                        return $term ? ['id' => $term->id, 'name' => $term->name, 'icon' => $term->icon] : ['id' => $id, 'name' => "Theme $id"];
+                        return $term ? ['id' => $term->id, 'name' => $term->name, 'icon' => $term->icon, 'slug' => $term->slug] : ['id' => $id, 'name' => "Theme $id"];
                     })->toArray(),
                     'suitable_for' => $tour->suitable_for,
                     'cities_covered' => $tour->cities_covered,
@@ -582,6 +604,7 @@ Route::prefix('tours')->group(function () {
                     'payment_terms' => $tour->payment_terms,
                     'meta_title' => $tour->seo_title,
                     'meta_description' => $tour->seo_desc,
+                    // OG/Twitter fields kept if defined in interface or likely needed for SEO Head
                     'og_title' => $tour->og_title,
                     'og_description' => $tour->og_description,
                     'og_image' => $tour->og_image,
@@ -589,14 +612,8 @@ Route::prefix('tours')->group(function () {
                     'twitter_description' => $tour->twitter_description,
                     'twitter_image' => $tour->twitter_image,
                     'twitter_card' => $tour->twitter_card,
-                    // Missing fields added
                     'address' => $tour->address,
-                    'map_zoom' => $tour->map_zoom,
-                    'map_image_url' => $tour->map_image_id ? get_file_url($tour->map_image_id, 'full') : null,
-                    'start_date' => $tour->start_date,
-                    'end_date' => $tour->end_date,
-                    'enable_fixed_date' => $tour->enable_fixed_date,
-                    'min_day_before_booking' => $tour->min_day_before_booking,
+                    // start_date, end_date, enable_fixed_date, min_day_before_booking removed (not in PublicTourDetail shown or assumed extra)
                     'review_score' => $tour->review_score,
                     'tour_expert' => $tour->tourExpert ? [
                         'id' => (int) $tour->tourExpert->id,
@@ -604,14 +621,16 @@ Route::prefix('tours')->group(function () {
                         'email' => $tour->tourExpert->email ?? '',
                         'avatar' => $tour->tourExpert->avatar_id ? get_file_url($tour->tourExpert->avatar_id, 'thumb') : null,
                     ] : null,
-                    'author' => $tour->author ? [
-                        'id' => $tour->author->id,
-                        'name' => $tour->author->getDisplayName() ?? $tour->author->name ?? $tour->author->first_name,
-                         'avatar_url' => $tour->author->getAvatarUrl() ?? null,
-                    ] : null,
-                    'created_at' => $tour->created_at,
-                    'updated_at' => $tour->updated_at,
+                    // author removed
                     'related_tours' => $relatedTours->map(function ($t) {
+                        $relatedCategories = collect([]);
+                        if (!empty($t->category_ids)) {
+                            $catIds = is_string($t->category_ids) ? json_decode($t->category_ids, true) : $t->category_ids;
+                            if (is_array($catIds) && count($catIds) > 0) {
+                                $relatedCategories = \Modules\Tour\Models\TourCategory::whereIn('id', $catIds)->select('id', 'name', 'slug')->get();
+                            }
+                        }
+                        
                         return [
                             'id' => $t->id,
                             'title' => $t->title,
@@ -627,6 +646,7 @@ Route::prefix('tours')->group(function () {
                                 'name' => $t->location->name,
                                 'slug' => $t->location->slug,
                             ] : null,
+                            'categories' => $relatedCategories,
                         ];
                     }),
                 ],
