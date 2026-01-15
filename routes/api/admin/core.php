@@ -556,6 +556,6 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
 // =====================================================
 // AUDIT LOGS MANAGEMENT
 // =====================================================
-Route::prefix('module/core/audit')->middleware(['auth:sanctum', 'permission:audit_log_view'])->group(function () {
+Route::prefix('module/core/audit-logs')->middleware(['auth:sanctum', 'permission:audit_log_view'])->group(function () {
     Route::get('/', [\Modules\Core\Controllers\AuditLogController::class, 'index']);
 });

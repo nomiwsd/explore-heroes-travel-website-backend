@@ -75,7 +75,23 @@ class AdminUserController extends Controller
     public function show($id)
     {
         $user = User::withTrashed()->with(['role'])->findOrFail($id);
-        return response()->json(['data' => $user]);
+        
+        $data = [
+             'id' => $user->id,
+             'name' => $user->name,
+             'email' => $user->email,
+             'phone' => $user->phone,
+             'bio' => $user->bio,
+             'role_id' => $user->role_id,
+             'role_name' => $user->role->name ?? 'User',
+             'status' => $user->status === 'publish' ? 'active' : ($user->status === 'blocked' ? 'inactive' : $user->status),
+             'created_at' => $user->created_at,
+             'avatar_url' => $user->avatar_url,
+             'last_login_at' => $user->last_login_at,
+             'deleted_at' => $user->deleted_at
+        ];
+
+        return response()->json(['data' => $data]);
     }
 
     public function store(Request $request, $id = null)
@@ -140,7 +156,7 @@ class AdminUserController extends Controller
         
         return response()->json(['success' => true, 'data' => $user]);
     }
-    }
+
 
     public function bulkEdit(Request $request)
     {

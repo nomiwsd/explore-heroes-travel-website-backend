@@ -12,7 +12,7 @@ use Modules\News\Models\NewsCategory;
 // =====================================================
 // NEWS/BLOG MANAGEMENT
 // =====================================================
-Route::prefix('module/news')->group(function () {
+Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
     // Get all news posts (no auth required for listing in admin dashboard)
     Route::get('/', function (Request $request) {
         try {

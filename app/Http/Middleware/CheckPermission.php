@@ -22,13 +22,7 @@ class CheckPermission
 
         $user = Auth::user();
 
-        // Super Admin (ID 1 or Role ID 1) generally has all permissions
-        // But let's stick to the HasPermissions trait logic if possible.
-        // However, for safety, strictly enforce Role ID 1 as Super Admin bypass.
-        if ($user->role_id == 1) {
-            return $next($request);
-        }
-
+        // Check Permissions
         if (!$user->hasPermission($permission)) {
             return response()->json([
                 'message' => 'You do not have permission to perform this action.',

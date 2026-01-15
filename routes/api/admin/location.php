@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Modules\Location\Models\Location;
 
-Route::prefix('module/location')->group(function () {
+Route::prefix('module/location')->middleware('auth:sanctum')->group(function () {
     // Get all locations (for admin)
     Route::get('/', function (Request $request) {
         try {

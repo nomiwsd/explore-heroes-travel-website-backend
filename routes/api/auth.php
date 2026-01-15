@@ -25,6 +25,16 @@ Route::prefix('admin')->group(function () {
             $user = Auth::user();
             $token = $user->createToken('admin-token')->plainTextToken;
 
+            // Audit Log Login
+            \Modules\Core\Models\AuditLog::create([
+                'user_id' => $user->id,
+                'event' => 'login',
+                'auditable_type' => 'User',
+                'auditable_id' => $user->id,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent()
+            ]);
+
             $permissions = [];
             if ($user->role_id == 1) {
                 // Super Admin gets all permissions
@@ -55,7 +65,21 @@ Route::prefix('admin')->group(function () {
 
     // Logout
     Route::post('/logout', function (Request $request) {
-        $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
+        
+        // Audit Log Logout
+        if ($user) {
+            \Modules\Core\Models\AuditLog::create([
+                'user_id' => $user->id,
+                'event' => 'logout',
+                'auditable_type' => 'User',
+                'auditable_id' => $user->id,
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent()
+            ]);
+        }
+
+        $user->currentAccessToken()->delete();
         return response()->json(['success' => true]);
     })->middleware('auth:sanctum');
 

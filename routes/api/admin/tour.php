@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Route;
 use Modules\Tour\Models\Tour;
 use Modules\Tour\Models\TourCategory;
 
-Route::prefix('module/tour')->group(function () {
+Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
     // Get all tours (for admin listing)
     Route::get('/', function (Request $request) {
         try {
@@ -82,11 +82,6 @@ Route::prefix('module/tour')->group(function () {
         }
     })->middleware('permission:tour_view');
     
-    // Get single tour for editing
-    Route::get('/edit/{id}', function ($id) {
-        // ... (existing code)
-    })->middleware('permission:tour_view');
-    
     // Create tour (protected)
     Route::middleware(['auth:sanctum', 'permission:tour_create'])->post('/store', function (Request $request) {
         return app()->call(function(Request $request) {
@@ -109,9 +104,8 @@ Route::prefix('module/tour')->group(function () {
     // For now, I will just apply 'permission:tour_view' to GET and 'permission:tour_update' to POST/DELETE.
     // This is a reasonable compromise without full refactor.
     
+    // Get single tour for editing
     Route::get('/edit/{id}', function ($id) {
-       // ...
-    })->middleware('permission:tour_view');
         try {
             $tour = Tour::with(['location', 'category_tour', 'tourExpert'])->findOrFail($id);
             
@@ -256,7 +250,7 @@ Route::prefix('module/tour')->group(function () {
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
-    });
+    })->middleware('permission:tour_view');
     
     // Create/Update tour (protected)
     Route::middleware(['auth:sanctum', 'permission:tour_update'])->post('/store/{id?}', function (Request $request, $id = null) {
@@ -527,4 +521,5 @@ Route::middleware('auth:sanctum')->get('/module/tour/experts', function () {
     } catch (\Exception $e) {
         return response()->json(['error' => $e->getMessage()], 500);
     }
+});
 });
