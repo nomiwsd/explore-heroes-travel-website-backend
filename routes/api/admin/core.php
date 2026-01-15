@@ -550,4 +550,12 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
+    // ... (existing routes)
+});
+
+// =====================================================
+// AUDIT LOGS MANAGEMENT
+// =====================================================
+Route::prefix('module/core/audit')->middleware(['auth:sanctum', 'permission:audit_log_view'])->group(function () {
+    Route::get('/', [\Modules\Core\Controllers\AuditLogController::class, 'index']);
 });

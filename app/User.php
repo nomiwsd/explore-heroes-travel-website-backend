@@ -57,10 +57,15 @@ class User extends Authenticatable implements MustVerifyEmail
         'country',
         'zip_code',
         'last_login_at',
+        'last_login_ip',
         'avatar_id',
         'bio',
         'business_name',
         'status',
+        'last_action_at',
+        'force_password_change',
+        'role_id',
+        'role_name'
     ];
 
     protected $attributes = [
@@ -241,13 +246,7 @@ class User extends Authenticatable implements MustVerifyEmail
         Mail::to($this->email)->send(new ResetPasswordToken($token, $this));
     }
 
-    public static function boot()
-    {
-        parent::boot();
-        static::saving(function ($table) {
-            $table->name = implode(' ', [$table->first_name, $table->last_name]);
-        });
-    }
+
 
 //        public function vendorPlan()
 //        {
@@ -462,8 +461,9 @@ class User extends Authenticatable implements MustVerifyEmail
         return [];
     }
 
-    public function getNameAttribute()
+    public function getNameAttribute($value)
     {
+        if (!empty($value)) return $value;
         return $this->business_name ? $this->business_name : $this->first_name . ' ' . $this->last_name;
     }
 

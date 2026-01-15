@@ -43,7 +43,8 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
-    });
+
+    })->middleware('permission:page_view');
     
     // Get single page for editing
     Route::get('/edit/{id}', function ($id) {
@@ -112,10 +113,11 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
-    });
+
+    })->middleware('permission:page_view');
     
     // Store/Update page
-    Route::post('/store/{id?}', function (Request $request, $id = null) {
+    Route::middleware(['permission:page_create'])->post('/store/{id?}', function (Request $request, $id = null) {
         try {
             if ($id) {
                 $page = Page::findOrFail($id);
@@ -177,7 +179,7 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
     });
     
     // Delete page
-    Route::delete('/{id}', function ($id) {
+    Route::middleware(['permission:page_delete'])->delete('/{id}', function ($id) {
         try {
             $page = Page::findOrFail($id);
             $page->delete();
@@ -192,7 +194,7 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
     });
     
     // Bulk edit
-    Route::post('/bulkEdit', function (Request $request) {
+    Route::middleware(['permission:page_update'])->post('/bulkEdit', function (Request $request) {
         try {
             $ids = $request->input('ids', []);
             $action = $request->input('action');

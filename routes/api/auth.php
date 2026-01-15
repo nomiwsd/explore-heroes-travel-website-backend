@@ -25,6 +25,14 @@ Route::prefix('admin')->group(function () {
             $user = Auth::user();
             $token = $user->createToken('admin-token')->plainTextToken;
 
+            $permissions = [];
+            if ($user->role_id == 1) {
+                // Super Admin gets all permissions
+                $permissions = \Modules\User\Helpers\PermissionHelper::all();
+            } else {
+                $permissions = $user->role ? $user->role->permissions->pluck('permission') : [];
+            }
+
             return response()->json([
                 'success' => true,
                 'token' => $token,
@@ -33,6 +41,8 @@ Route::prefix('admin')->group(function () {
                     'name' => $user->name,
                     'email' => $user->email,
                     'avatar' => $user->avatar_url ?? null,
+                    'role' => $user->role_name,
+                    'permissions' => $permissions
                 ],
             ]);
         }

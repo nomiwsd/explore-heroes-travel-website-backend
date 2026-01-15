@@ -73,7 +73,7 @@ Route::prefix('module/news')->group(function () {
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
-    });
+    })->middleware('permission:news_view');
     
     // Get single post for editing
     Route::get('/edit/{id}', function ($id) {
@@ -189,12 +189,12 @@ Route::prefix('module/news')->group(function () {
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
-    });
+    })->middleware('permission:news_view');
     
     // Protected routes (require authentication)
     Route::middleware('auth:sanctum')->group(function () {
         // Store/Update post
-        Route::post('/store/{id?}', function (Request $request, $id = null) {
+        Route::middleware('permission:news_update')->post('/store/{id?}', function (Request $request, $id = null) {
             try {
                 if ($id) {
                     $post = News::findOrFail($id);
@@ -302,7 +302,7 @@ Route::prefix('module/news')->group(function () {
         });
         
         // Delete post
-        Route::delete('/{id}', function ($id) {
+        Route::middleware('permission:news_delete')->delete('/{id}', function ($id) {
             try {
                 $post = News::findOrFail($id);
                 $post->delete();
@@ -317,7 +317,7 @@ Route::prefix('module/news')->group(function () {
         });
         
         // Bulk edit
-        Route::post('/bulkEdit', function (Request $request) {
+        Route::middleware('permission:news_update')->post('/bulkEdit', function (Request $request) {
             try {
                 $ids = $request->input('ids', []);
                 $action = $request->input('action');
@@ -350,7 +350,7 @@ Route::prefix('module/news')->group(function () {
         });
         
         // Get statistics
-        Route::get('/statistics', function () {
+        Route::middleware('permission:news_view')->get('/statistics', function () {
             try {
                 $stats = [
                     'total' => News::count(),
@@ -367,6 +367,15 @@ Route::prefix('module/news')->group(function () {
             }
         });
     }); // Close auth:sanctum middleware group
+    // Applying permissions to the group is harder because it's already defined.
+    // I will apply middleware to individual routes inside or wrap the group?
+    // It's already wrapped in auth:sanctum.
+    // store/{id?} -> news_create/update.
+    // delete/{id} -> news_delete.
+    // bulkEdit -> news_update.
+    // statistics -> news_view.
+    
+    // I will modify the routes inside.
 });
 
 // =====================================================

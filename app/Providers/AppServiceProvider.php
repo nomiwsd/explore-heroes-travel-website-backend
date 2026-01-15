@@ -57,6 +57,13 @@ class AppServiceProvider extends ServiceProvider
         if(auth()->id() and !auth()->check()){
             auth()->logout();
         }
+
+        // Register Audit Log Observer
+        \Modules\Tour\Models\Tour::observe(\Modules\Core\Observers\AuditLogObserver::class);
+        \Modules\Location\Models\Location::observe(\Modules\Core\Observers\AuditLogObserver::class);
+        \Modules\Page\Models\Page::observe(\Modules\Core\Observers\AuditLogObserver::class);
+        \Modules\News\Models\News::observe(\Modules\Core\Observers\AuditLogObserver::class);
+        // \Modules\Review\Models\Review::observe(\Modules\Core\Observers\AuditLogObserver::class);
     }
 
     protected function initConfigFromDB(){

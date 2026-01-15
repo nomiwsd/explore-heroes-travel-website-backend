@@ -47,7 +47,19 @@ class PermissionHelper
     }
 
     protected static function load(){
-        static::$all = config('permissions');
+        $config = config('permissions');
+        $all = [];
+        if (is_array($config)) {
+            foreach ($config as $group => $perms) {
+                if (is_array($perms)) {
+                    $all = array_merge($all, $perms);
+                } else {
+                     // Handle legacy flat array case just in case
+                     $all[] = $perms;
+                }
+            }
+        }
+        static::$all = $all;
         static::$is_initial = true;
     }
 }

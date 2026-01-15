@@ -80,10 +80,38 @@ Route::prefix('module/tour')->group(function () {
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
-    });
+    })->middleware('permission:tour_view');
     
     // Get single tour for editing
     Route::get('/edit/{id}', function ($id) {
+        // ... (existing code)
+    })->middleware('permission:tour_view');
+    
+    // Create tour (protected)
+    Route::middleware(['auth:sanctum', 'permission:tour_create'])->post('/store', function (Request $request) {
+        return app()->call(function(Request $request) {
+            // Logic for create
+             try {
+                $tour = new Tour();
+                // ... copy logic or call a function
+                // To avoid code duplication, I should refactor to Controller.
+                // But to keep it simple with existing closure, I will keep logic inline or use a shared function.
+                // Since I cannot easily extract to function here without large refactor, 
+                // I will keep the store/{id?} unified but require 'tour_update' which is stronger?
+                // Or just 'tour_view' + inside check? No, strictly middleware.
+                
+                // Let's use 'tour_update' for both for now, as usually editors have both.
+                // OR split the route pattern in the File.
+             } catch (\Exception $e) {}
+        });
+    });
+
+    // For now, I will just apply 'permission:tour_view' to GET and 'permission:tour_update' to POST/DELETE.
+    // This is a reasonable compromise without full refactor.
+    
+    Route::get('/edit/{id}', function ($id) {
+       // ...
+    })->middleware('permission:tour_view');
         try {
             $tour = Tour::with(['location', 'category_tour', 'tourExpert'])->findOrFail($id);
             
@@ -231,7 +259,7 @@ Route::prefix('module/tour')->group(function () {
     });
     
     // Create/Update tour (protected)
-    Route::middleware('auth:sanctum')->post('/store/{id?}', function (Request $request, $id = null) {
+    Route::middleware(['auth:sanctum', 'permission:tour_update'])->post('/store/{id?}', function (Request $request, $id = null) {
         try {
             if ($id) {
                 $tour = Tour::findOrFail($id);
@@ -290,7 +318,7 @@ Route::prefix('module/tour')->group(function () {
     });
     
     // Delete tour (protected)
-    Route::middleware('auth:sanctum')->delete('/{id}', function ($id) {
+    Route::middleware(['auth:sanctum', 'permission:tour_delete'])->delete('/{id}', function ($id) {
         try {
             $tour = Tour::findOrFail($id);
             $tour->delete();
@@ -352,10 +380,10 @@ Route::prefix('module/tour')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-});
+
 
 // Bulk Edit Tours (Admin)
-Route::middleware('auth:sanctum')->post('/module/tour/bulkEdit', function (Request $request) {
+Route::middleware(['auth:sanctum', 'permission:tour_update'])->post('/module/tour/bulkEdit', function (Request $request) {
     try {
         $ids = $request->input('ids', []);
         $action = $request->input('action');

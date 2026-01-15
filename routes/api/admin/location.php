@@ -69,7 +69,8 @@ Route::prefix('module/location')->group(function () {
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
-    });
+        
+    })->middleware('permission:location_view');
     
     // Get single location for editing
     Route::get('/edit/{id}', function ($id) {
@@ -124,10 +125,10 @@ Route::prefix('module/location')->group(function () {
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
-    });
+    })->middleware('permission:location_view');
     
     // Create location
-    Route::middleware('auth:sanctum')->post('/store', function (Request $request) {
+    Route::middleware(['auth:sanctum', 'permission:location_create'])->post('/store', function (Request $request) {
         try {
             $loc = new Location();
             $loc->fill($request->only([
@@ -171,7 +172,7 @@ Route::prefix('module/location')->group(function () {
     });
     
     // Update location
-    Route::middleware('auth:sanctum')->post('/store/{id}', function (Request $request, $id) {
+    Route::middleware(['auth:sanctum', 'permission:location_update'])->post('/store/{id}', function (Request $request, $id) {
         try {
             $loc = Location::findOrFail($id);
             $loc->fill($request->only([
@@ -214,7 +215,7 @@ Route::prefix('module/location')->group(function () {
     });
     
     // Bulk edit (delete, publish, draft)
-    Route::middleware('auth:sanctum')->post('/bulkEdit', function (Request $request) {
+    Route::middleware(['auth:sanctum', 'permission:location_update'])->post('/bulkEdit', function (Request $request) {
         try {
             $ids = $request->input('ids', []);
             $action = $request->input('action');
