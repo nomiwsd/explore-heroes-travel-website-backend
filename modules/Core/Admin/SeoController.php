@@ -181,6 +181,7 @@ class SeoController extends Controller
             'frequency' => setting_item('sitemap_frequency', 'weekly'),
             'priority' => (float) setting_item('sitemap_priority', 0.8),
             'exclude_urls' => json_decode(setting_item('sitemap_exclude_urls', '[]'), true),
+            'custom_urls' => json_decode(setting_item('sitemap_custom_urls', '[]'), true),
         ]);
     }
 
@@ -190,7 +191,7 @@ class SeoController extends Controller
         $settings = $request->all();
         
         foreach ($settings as $key => $value) {
-            if ($key === 'exclude_urls') {
+            if ($key === 'exclude_urls' || $key === 'custom_urls') {
                 $value = json_encode($value);
             }
             
@@ -209,15 +210,22 @@ class SeoController extends Controller
         $sitemapPath = public_path('sitemap.xml');
         $xml = '<?xml version="1.0" encoding="UTF-8"?>';
         $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+        
+        // Use Frontend URL from env, fallback to request root or default
+        $baseUrl = rtrim(env('FRONTEND_URL', 'http://localhost:3000'), '/');
 
         // 1. Static & Home
-        $xml .= '<url><loc>' . url('/') . '</loc><changefreq>daily</changefreq><priority>1.0</priority></url>';
+        $xml .= '<url><loc>' . $baseUrl . '</loc><changefreq>daily</changefreq><priority>1.0</priority></url>';
 
         // 2. Pages
         if (setting_item('sitemap_include_pages', 1)) {
             $pages = \Modules\Page\Models\Page::where('status', 'publish')->get();
             foreach ($pages as $page) {
-                $xml .= '<url><loc>' . $page->getDetailUrl() . '</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>';
+                // Avoid double slashes or prefixing 'home' if it's the index
+                $slug = $page->slug === 'home' || $page->slug === 'homepage' ? '' : $page->slug;
+                if ($slug) {
+                    $xml .= '<url><loc>' . $baseUrl . '/' . $slug . '</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>';
+                }
             }
         }
 
@@ -225,23 +233,33 @@ class SeoController extends Controller
         if (setting_item('sitemap_include_tours', 1)) {
             $tours = \Modules\Tour\Models\Tour::where('status', 'publish')->get();
             foreach ($tours as $tour) {
-                $xml .= '<url><loc>' . $tour->getDetailUrl() . '</loc><changefreq>daily</changefreq><priority>0.9</priority></url>';
+                $xml .= '<url><loc>' . $baseUrl . '/tours/' . $tour->slug . '</loc><changefreq>daily</changefreq><priority>0.9</priority></url>';
             }
         }
 
-        // 4. Destinations (Locations)
+        // 4. Destinations (Use correct frontend route: /destinations/)
         if (setting_item('sitemap_include_destinations', 1)) {
             $locations = \Modules\Location\Models\Location::where('status', 'publish')->get();
             foreach ($locations as $location) {
-                $xml .= '<url><loc>' . $location->getDetailUrl() . '</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>';
+                $xml .= '<url><loc>' . $baseUrl . '/destinations/' . $location->slug . '</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>';
             }
         }
 
-        // 5. Blog (News)
+        // 5. Blog (News) (Use correct frontend route: /blogs/)
         if (setting_item('sitemap_include_blog', 1)) {
             $news = \Modules\News\Models\News::where('status', 'publish')->get();
             foreach ($news as $post) {
-                $xml .= '<url><loc>' . $post->getDetailUrl() . '</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>';
+                $xml .= '<url><loc>' . $baseUrl . '/blogs/' . $post->slug . '</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>';
+            }
+        }
+
+        // 6. Custom URLs
+        $customUrls = json_decode(setting_item('sitemap_custom_urls', '[]'), true);
+        if (!empty($customUrls) && is_array($customUrls)) {
+            foreach ($customUrls as $customUrl) {
+                // Ensure URL is absolute or relative to base
+                $loc = str_starts_with($customUrl, 'http') ? $customUrl : $baseUrl . '/' . ltrim($customUrl, '/');
+                $xml .= '<url><loc>' . $loc . '</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>';
             }
         }
 
@@ -249,7 +267,8 @@ class SeoController extends Controller
 
         file_put_contents($sitemapPath, $xml);
 
-        return response()->json(['success' => true, 'url' => url('sitemap.xml')]);
+        // Return the frontend URL for the sitemap link
+        return response()->json(['success' => true, 'url' => $baseUrl . '/sitemap.xml']);
     }
 
     // Get robots.txt content

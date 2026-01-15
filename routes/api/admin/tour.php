@@ -199,18 +199,22 @@ Route::prefix('module/tour')->group(function () {
                     // SEO fields
                     'seo_title' => $tour->seo_title ?? '',
                     'seo_desc' => $tour->seo_desc ?? '',
-                    'seo_image' => $tour->seo_image ?? '',
-                    
+                    'seo_keywords' => $tour->seo_keywords ?? '',
+                    'canonical_url' => $tour->canonical_url ?? '',
+                    'robots_meta' => $tour->robots_meta ?? '',
+                    'schema_markup' => $tour->schema_markup ?? '',             
                     // OG fields
                     'og_title' => $tour->og_title ?? '',
                     'og_description' => $tour->og_description ?? '',
-                    'og_image' => $tour->og_image ?? '',
+                    'og_image_id' => $tour->og_image_id ? (int)$tour->og_image_id : null,
+                    'og_image_url' => $tour->og_image_url ?? '',
                     
                     // Twitter fields
                     'twitter_card' => $tour->twitter_card ?? 'summary_large_image',
                     'twitter_title' => $tour->twitter_title ?? '',
                     'twitter_description' => $tour->twitter_description ?? '',
-                    'twitter_image' => $tour->twitter_image ?? '',
+                    'twitter_image_id' => $tour->twitter_image_id ? (int)$tour->twitter_image_id : null,
+                    'twitter_image_url' => $tour->twitter_image_url ?? '',
                     
                     // Timestamps & Author
                     'created_at' => $tour->created_at,
@@ -259,11 +263,11 @@ Route::prefix('module/tour')->group(function () {
                 'min_day_before_booking', 'enable_fixed_date', 'start_date', 'end_date', 'last_booking_date',
                 'availability_dates', 'related_tour_ids',
                 // SEO
-                'seo_title', 'seo_desc', 'seo_image',
+                'seo_title', 'seo_desc', 'seo_image', 'seo_keywords', 'canonical_url', 'robots_meta', 'schema_markup',
                 // OG
-                'og_title', 'og_description', 'og_image',
+                'og_title', 'og_description', 'og_image', 'og_image_id', 'og_image_url',
                 // Twitter
-                'twitter_card', 'twitter_title', 'twitter_description', 'twitter_image',
+                'twitter_card', 'twitter_title', 'twitter_description', 'twitter_image', 'twitter_image_id', 'twitter_image_url',
             ];
             
             $tour->fill($request->only($allowedFields));

@@ -36,3 +36,4 @@ public/themes/*/dist
 /bootstrap/cache/*.php
 README-clean-broken-images.md
 README-remove-images.md
+public/sitemap.xml
