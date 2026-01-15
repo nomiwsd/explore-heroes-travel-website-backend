@@ -29,8 +29,22 @@
             'is_featured',
             'show_on_homepage',
             'destination_type',
-            'display_order',
-            'gallery'
+        'display_order',
+            'gallery',
+            // SEO Fields
+            'seo_title',
+            'seo_desc',
+            'seo_keywords',
+            'og_title',
+            'og_description',
+            'og_image_id',
+            'twitter_card',
+            'twitter_title',
+            'twitter_description',
+            'twitter_image_id',
+            'canonical_url',
+            'robots_meta',
+            'schema_markup'
         ];
         protected $slugField     = 'slug';
         protected $slugFromField = 'name';
@@ -152,4 +166,19 @@
         {
             return $this->hasMany(\Modules\Tour\Models\TourLocation::class, 'location_id');
         }
+    public function og_image()
+    {
+        return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'og_image_id');
+    }
+
+    public function twitter_image()
+    {
+        return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'twitter_image_id');
+    }
+
+    public function author()
+    {
+        return $this->belongsTo(\App\User::class, 'create_user');
+    }
+
     }

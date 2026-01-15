@@ -203,6 +203,16 @@ Route::prefix('destinations')->group(function () {
                     'map_zoom' => $destination->map_zoom,
                     'meta_title' => $seo['seo_title'] ?? $destination->name,
                     'meta_description' => $seo['seo_desc'] ?? $translation->short_description,
+                    'og_title' => $destination->og_title,
+                    'og_description' => $destination->og_description,
+                    'og_image_url' => $destination->og_image_id ? get_file_url($destination->og_image_id, 'full') : null,
+                    'twitter_title' => $destination->twitter_title,
+                    'twitter_description' => $destination->twitter_description,
+                    'twitter_image_url' => $destination->twitter_image_id ? get_file_url($destination->twitter_image_id, 'full') : null,
+                    'twitter_card' => $destination->twitter_card,
+                    'canonical_url' => $destination->canonical_url,
+                    'robots_meta' => $destination->robots_meta,
+                    'schema_markup' => $destination->schema_markup,
                     'tours' => $tours->map(function ($tour) {
                         return [
                             'id' => $tour->id,
@@ -580,7 +590,7 @@ Route::prefix('tours')->group(function () {
                         'id' => $tour->location->id,
                         'name' => $tour->location->name,
                         'slug' => $tour->location->slug,
-                        'image_url' => $tour->location->image_id ? get_file_url($tour->location->image_id, 'full') : null,
+                        'image_url' => $tour->location->image_id ? parse_url(get_file_url($tour->location->image_id, 'full'), PHP_URL_PATH) : null,
                     ] : null,
                     'categories' => $categories, 
                     // gallery removed
@@ -607,11 +617,14 @@ Route::prefix('tours')->group(function () {
                     // OG/Twitter fields kept if defined in interface or likely needed for SEO Head
                     'og_title' => $tour->og_title,
                     'og_description' => $tour->og_description,
-                    'og_image' => $tour->og_image,
+                    'og_image_url' => $tour->og_image_id ? parse_url(get_file_url($tour->og_image_id, 'full'), PHP_URL_PATH) : null,
                     'twitter_title' => $tour->twitter_title,
                     'twitter_description' => $tour->twitter_description,
-                    'twitter_image' => $tour->twitter_image,
+                    'twitter_image_url' => $tour->twitter_image_id ? get_file_url($tour->twitter_image_id, 'full') : null,
                     'twitter_card' => $tour->twitter_card,
+                    'canonical_url' => $tour->canonical_url,
+                    'robots_meta' => $tour->robots_meta,
+                    'schema_markup' => $tour->schema_markup,
                     'address' => $tour->address,
                     // start_date, end_date, enable_fixed_date, min_day_before_booking removed (not in PublicTourDetail shown or assumed extra)
                     'review_score' => $tour->review_score,
@@ -1140,9 +1153,21 @@ Route::prefix('news')->group(function () {
                         'slug' => $post->location->slug,
                     ] : null,
                     'author' => $author,
+                    'author_bio' => $post->author_bio,
                     'reading_time' => $post->reading_time ?? null,
                     'publish_date' => $post->created_at ? $post->created_at->format('Y-m-d') : null,
                     'created_at' => $post->created_at,
+                    'created_at' => $post->created_at,
+                    'og_title' => $post->og_title,
+                    'og_description' => $post->og_description,
+                    'og_image_url' => $post->og_image_id ? parse_url(get_file_url($post->og_image_id, 'full'), PHP_URL_PATH) : null,
+                    'twitter_title' => $post->twitter_title,
+                    'twitter_description' => $post->twitter_description,
+                    'twitter_image_url' => $post->twitter_image_id ? parse_url(get_file_url($post->twitter_image_id, 'full'), PHP_URL_PATH) : null,
+                    'twitter_card' => $post->twitter_card,
+                    'canonical_url' => $post->canonical_url,
+                    'robots_meta' => $post->robots_meta,
+                    'schema_markup' => $post->schema_markup,
                     'related_posts' => $related,
                 ]
             ]);
@@ -1201,8 +1226,17 @@ Route::prefix('pages')->group(function () {
                     ->where('slug', 'home')
                     ->first();
             }
+
+            if (!$page) {
+                return response()->json(['error' => 'Homepage not found'], 404);
+            }
             
-            return response()->json($page);
+            $pageData = $page->toArray();
+            $pageData['og_image_url'] = $page->og_image_id ? get_file_url($page->og_image_id, 'full') : null;
+            $pageData['twitter_image_url'] = $page->twitter_image_id ? get_file_url($page->twitter_image_id, 'full') : null;
+            $pageData['banner_image_url'] = $page->banner_image_id ? get_file_url($page->banner_image_id, 'full') : null;
+            
+            return response()->json(['data' => $pageData]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
@@ -1219,7 +1253,11 @@ Route::prefix('pages')->group(function () {
                 return response()->json(['error' => 'Page not found'], 404);
             }
             
-            return response()->json(['data' => $page]);
+            $pageData = $page->toArray();
+            $pageData['og_image_url'] = $page->og_image_id ? get_file_url($page->og_image_id, 'full') : null;
+            $pageData['twitter_image_url'] = $page->twitter_image_id ? get_file_url($page->twitter_image_id, 'full') : null;
+            
+            return response()->json(['data' => $pageData]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }

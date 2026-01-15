@@ -31,6 +31,7 @@ Route::group(['prefix' => 'seo'], function () {
 
     Route::get('/sitemap', 'SeoController@getSitemapSettings')->name('core.admin.seo.sitemap');
     Route::post('/sitemap', 'SeoController@updateSitemapSettings')->name('core.admin.seo.sitemap.update');
+    Route::post('/sitemap/generate', 'SeoController@generateSitemap')->name('core.admin.seo.sitemap.generate');
 
     Route::get('/robots', 'SeoController@getRobotsTxt')->name('core.admin.seo.robots');
     Route::post('/robots', 'SeoController@updateRobotsTxt')->name('core.admin.seo.robots.update');

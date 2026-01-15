@@ -203,6 +203,55 @@ class SeoController extends Controller
         return response()->json(['success' => true]);
     }
 
+    // Generate Sitemap
+    public function generateSitemap()
+    {
+        $sitemapPath = public_path('sitemap.xml');
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>';
+        $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+
+        // 1. Static & Home
+        $xml .= '<url><loc>' . url('/') . '</loc><changefreq>daily</changefreq><priority>1.0</priority></url>';
+
+        // 2. Pages
+        if (setting_item('sitemap_include_pages', 1)) {
+            $pages = \Modules\Page\Models\Page::where('status', 'publish')->get();
+            foreach ($pages as $page) {
+                $xml .= '<url><loc>' . $page->getDetailUrl() . '</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>';
+            }
+        }
+
+        // 3. Tours
+        if (setting_item('sitemap_include_tours', 1)) {
+            $tours = \Modules\Tour\Models\Tour::where('status', 'publish')->get();
+            foreach ($tours as $tour) {
+                $xml .= '<url><loc>' . $tour->getDetailUrl() . '</loc><changefreq>daily</changefreq><priority>0.9</priority></url>';
+            }
+        }
+
+        // 4. Destinations (Locations)
+        if (setting_item('sitemap_include_destinations', 1)) {
+            $locations = \Modules\Location\Models\Location::where('status', 'publish')->get();
+            foreach ($locations as $location) {
+                $xml .= '<url><loc>' . $location->getDetailUrl() . '</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>';
+            }
+        }
+
+        // 5. Blog (News)
+        if (setting_item('sitemap_include_blog', 1)) {
+            $news = \Modules\News\Models\News::where('status', 'publish')->get();
+            foreach ($news as $post) {
+                $xml .= '<url><loc>' . $post->getDetailUrl() . '</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>';
+            }
+        }
+
+        $xml .= '</urlset>';
+
+        file_put_contents($sitemapPath, $xml);
+
+        return response()->json(['success' => true, 'url' => url('sitemap.xml')]);
+    }
+
     // Get robots.txt content
     public function getRobotsTxt()
     {

@@ -123,28 +123,53 @@ Route::prefix('module/news')->group(function () {
                     'title' => $post->title,
                     'slug' => $post->slug,
                     'content' => $post->content,
-                    'short_desc' => $post->short_desc,
                     'excerpt' => $post->excerpt,
-                    'image_id' => $post->image_id,
+
+                    // Mapped Image Fields (Featured)
+                    'featured_image_id' => $post->image_id,
+                    'featured_image_alt' => $post->image_alt,
+                    'featured_image_url' => $post->image_id ? '/storage/' . \Modules\Media\Models\MediaFile::find($post->image_id)?->file_path : null,
+
+                    // SEO Images (Relative Paths)
+                    'og_image_url' => $post->og_image_id ? '/storage/' . \Modules\Media\Models\MediaFile::find($post->og_image_id)?->file_path : null,
+                    'twitter_image_url' => $post->twitter_image_id ? '/storage/' . \Modules\Media\Models\MediaFile::find($post->twitter_image_id)?->file_path : null,
+                    
+                    // SEO Fields
                     'og_image_id' => $post->og_image_id,
-                    'image_alt' => $post->image_alt,
-                    'image_url' => $imageUrl,
-                    'image_file_path' => $imageFilePath,
-                    'og_image_url' => $ogImageUrl,
-                    'og_image_file_path' => $ogImageFilePath,
-                    'cat_id' => $post->cat_id,
-                    'category_id' => $post->cat_id, // Alias for frontend
+                    'twitter_image_id' => $post->twitter_image_id, // Often needed for frontend logic
+                    
+                    'meta_title' => $seoMeta['seo_title'] ?? $post->meta_title ?? null,
+                    'meta_desc' => $seoMeta['seo_desc'] ?? $post->meta_desc ?? null,
+                    'meta_keywords' => $post->meta_keywords ?? null,
+                    
+                    'og_title' => $post->og_title,
+                    'og_description' => $post->og_description,
+                    
+                    'twitter_title' => $post->twitter_title,
+                    'twitter_description' => $post->twitter_description,
+                    'twitter_card' => $post->twitter_card,
+                    
+                    'canonical_url' => $post->canonical_url,
+                    'robots_meta' => $post->robots_meta,
+                    'schema_markup' => $post->schema_markup,
+
+                    // Categories & Tags
+                    'category_id' => $post->cat_id,
                     'location_id' => $post->location_id,
+                    'tag_ids' => $tagIds,
+                    'related_posts' => $relatedPosts,
+                    
+                    // Meta
                     'status' => $post->status,
                     'is_featured' => $post->is_featured,
                     'author_bio' => $post->author_bio,
                     'reading_time' => $post->reading_time,
-                    'tag_ids' => $tagIds,
-                    'related_posts' => $relatedPosts,
+                    'publish_date' => $post->publish_date, // Added explicit field
                     'gallery' => $gallery,
-                    'meta_title' => $seoMeta['seo_title'] ?? $post->meta_title ?? null,
-                    'meta_desc' => $seoMeta['seo_desc'] ?? $post->meta_desc ?? null,
-                    'meta_keywords' => $post->meta_keywords ?? null,
+                    'created_at' => $post->created_at,
+                    'updated_at' => $post->updated_at,
+
+                    // Relations
                     'category' => $post->category,
                     'author' => ($post->author && $post->author->id) ? [
                         'id' => $post->author->id,
@@ -159,8 +184,6 @@ Route::prefix('module/news')->group(function () {
                         'display_name' => auth()->user()?->getDisplayName() ?? 'Unknown',
                         'email' => auth()->user()?->email ?? '',
                     ]),
-                    'created_at' => $post->created_at,
-                    'updated_at' => $post->updated_at,
                 ],
             ]);
         } catch (\Exception $e) {
@@ -204,6 +227,35 @@ Route::prefix('module/news')->group(function () {
                 // Additional fields
                 $post->author_bio = $request->input('author_bio');
                 $post->reading_time = $request->input('reading_time');
+                
+                // PUBLISH DATE (Saved to explicit column)
+                if ($request->has('publish_date') && !empty($request->input('publish_date'))) {
+                    $post->publish_date = \Carbon\Carbon::parse($request->input('publish_date'));
+                } else {
+                     // Default to now if publishing and no date provided? Or keep null.
+                     // User payload sends explicit date.
+                }
+
+                // Handle Featured Image ID (Frontend sends featured_image_id, backend uses image_id)
+                if ($request->has('featured_image_id')) {
+                     $post->image_id = $request->input('featured_image_id');
+                }
+                if ($request->has('featured_image_alt')) {
+                     $post->image_alt = $request->input('featured_image_alt');
+                }
+
+                // SEO & Social Fields (Saved directly to News model as per fillable)
+                $post->og_title = $request->input('og_title');
+                $post->og_description = $request->input('og_description');
+                
+                $post->twitter_title = $request->input('twitter_title');
+                $post->twitter_description = $request->input('twitter_description');
+                $post->twitter_card = $request->input('twitter_card');
+                $post->twitter_image_id = $request->input('twitter_image_id');
+                
+                $post->canonical_url = $request->input('canonical_url');
+                $post->robots_meta = $request->input('robots_meta');
+                $post->schema_markup = $request->input('schema_markup');
                 
                 // Array fields (stored as JSON)
                 if ($request->has('related_posts')) {

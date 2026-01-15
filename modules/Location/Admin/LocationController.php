@@ -60,6 +60,18 @@ class LocationController extends AdminController
         return view('Location::admin.index', $data);
     }
 
+    private function getRelativePath($id) {
+        if (!$id) return null;
+        $url = get_file_url($id, 'full');
+        if (!$url) return null;
+        $path = parse_url($url, PHP_URL_PATH);
+        // Ensure path starts with /storage if it starts with /uploads
+        if ($path && strpos($path, '/uploads/') === 0) {
+            return '/storage' . $path;
+        }
+        return $path;
+    }
+
     public function edit(Request $request, $id)
     {
         $this->apiCheckPermission('location_update');
@@ -74,19 +86,14 @@ class LocationController extends AdminController
         
         $translation = $row->translate($request->query('lang',get_main_lang()));
 
-        // Return JSON for API requests
         if ($request->wantsJson() || $request->expectsJson()) {
-            $imageUrl = null;
-            if ($row->image_id) {
-                $url = get_file_url($row->image_id, 'full');
-                $imageUrl = $url ?: null;
-            }
-            
-            $bannerImageUrl = null;
-            if ($row->banner_image_id) {
-                $url = get_file_url($row->banner_image_id, 'full');
-                $bannerImageUrl = $url ?: null;
-            }
+            $imageUrl = $this->getRelativePath($row->image_id);
+            $bannerImageUrl = $this->getRelativePath($row->banner_image_id);
+            $ogImageUrl = $this->getRelativePath($row->og_image_id);
+            $twitterImageUrl = $this->getRelativePath($row->twitter_image_id);
+            $bannerImageUrl = $this->getRelativePath($row->banner_image_id);
+            $ogImageUrl = $this->getRelativePath($row->og_image_id);
+            $twitterImageUrl = $this->getRelativePath($row->twitter_image_id);
 
             $seo = $row->getSeoMeta();
 
@@ -96,8 +103,6 @@ class LocationController extends AdminController
                     'name' => $row->name,
                     'slug' => $row->slug,
                     'content' => $translation->content,
-                    'image_id' => $row->image_id,
-                    'image_url' => $imageUrl,
                     'banner_image_id' => $row->banner_image_id ?? null,
                     'banner_image_url' => $bannerImageUrl,
                     'gallery' => $row->gallery,
@@ -113,11 +118,26 @@ class LocationController extends AdminController
                     'short_description' => $translation->short_description,
                     'seo_title' => $seo['seo_title'] ?? '',
                     'seo_desc' => $seo['seo_desc'] ?? '',
+                    'og_title' => $row->og_title,
+                    'og_description' => $row->og_description,
+                    'og_image_id' => $row->og_image_id,
+                    'og_image_url' => $ogImageUrl,
+                    'twitter_card' => $row->twitter_card,
+                    'twitter_title' => $row->twitter_title,
+                    'twitter_description' => $row->twitter_description,
+                    'twitter_image_id' => $row->twitter_image_id,
+                    'twitter_image_url' => $twitterImageUrl,
+                    'canonical_url' => $row->canonical_url,
+                    'robots_meta' => $row->robots_meta,
+                    'schema_markup' => $row->schema_markup,
                     'tours' => $row->tours->map(function($tl){
                         return ['id' => $tl->tour_id];
                     }),
                     'created_at' => $row->created_at,
                     'updated_at' => $row->updated_at,
+                    'author' => $row->author ? ['display_name' => $row->author->getDisplayName()] : null,
+                    'seo_keywords' => $row->seo_keywords,
+
                 ],
                 'translation' => $translation
             ]);
@@ -253,9 +273,15 @@ class LocationController extends AdminController
         $ids = $request->input('ids');
         $action = $request->input('action');
         if (empty($ids) or !is_array($ids)) {
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json(['error' => __("Select at least 1 item!")], 422);
+            }
             return redirect()->back()->with('error', __("Select at least 1 item!"));
         }
         if (empty($action)) {
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json(['error' => __('Select an Action!')], 422);
+            }
             return redirect()->back()->with('error', __('Select an Action!'));
         }
         if ($action == "delete") {
@@ -289,6 +315,14 @@ class LocationController extends AdminController
                 $query->update(['status' => $action]);
             }
         }
+        
+        if ($request->wantsJson() || $request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => __('Updated success!')
+            ]);
+        }
+        
         return redirect()->back()->with('success', __('Updated success!'));
     }
 }

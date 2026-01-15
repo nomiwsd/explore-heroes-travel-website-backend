@@ -31,9 +31,20 @@ class News extends BaseModel
         'author_id',
         'author_bio',
         'reading_time',
+        'publish_date', // Added column
         'meta_title',
         'meta_desc',
         'meta_keywords',
+        // SEO Fields
+        'og_title',
+        'og_description',
+        'twitter_card',
+        'twitter_title',
+        'twitter_description',
+        'twitter_image_id',
+        'canonical_url',
+        'robots_meta',
+        'schema_markup'
     ];
     protected $slugField = 'slug';
     protected $slugFromField = 'title';
@@ -42,6 +53,7 @@ class News extends BaseModel
 
     protected $casts = [
         'related_posts' => 'array',
+        'publish_date' => 'datetime',
     ];
 
     protected $sitemap_type = 'page';
@@ -49,6 +61,16 @@ class News extends BaseModel
     public function getDetailUrlAttribute()
     {
         return url('news-' . $this->slug);
+    }
+
+    public function og_image()
+    {
+        return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'og_image_id');
+    }
+
+    public function twitter_image()
+    {
+        return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'twitter_image_id');
     }
 
     public function geCategorylink()

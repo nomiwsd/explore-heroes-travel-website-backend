@@ -105,6 +105,9 @@ class Tour extends BaseModel
         'twitter_title',
         'twitter_description',
         'twitter_image',
+        'canonical_url',
+        'robots_meta',
+        'schema_markup',
     ];
     protected $slugField                          = 'slug';
     protected $slugFromField                      = 'title';
@@ -1296,6 +1299,16 @@ class Tour extends BaseModel
     public function author()
     {
         return $this->belongsTo(\App\User::class, 'create_user');
+    }
+
+    public function og_image()
+    {
+        return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'og_image_id');
+    }
+
+    public function twitter_image()
+    {
+        return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'twitter_image_id');
     }
 
 }

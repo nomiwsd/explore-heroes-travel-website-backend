@@ -83,6 +83,18 @@ class NewsController extends AdminController
         return view('News::admin.news.detail', $data);
     }
 
+    private function getRelativePath($id) {
+        if (!$id) return null;
+        $url = get_file_url($id, 'full');
+        if (!$url) return null;
+        $path = parse_url($url, PHP_URL_PATH);
+        // Ensure path starts with /storage if it starts with /uploads
+        if ($path && strpos($path, '/uploads/') === 0) {
+            return '/storage' . $path;
+        }
+        return $path;
+    }
+
     public function edit(Request $request, $id)
     {
         $this->checkPermission('news_update');
@@ -99,39 +111,43 @@ class NewsController extends AdminController
         $translation = $row->translate($request->query('lang',get_main_lang()));
 
         if ($request->wantsJson() || $request->expectsJson()) {
-            // Load relations including images (assuming 'image' and 'og_image' relations exist or we use MediaFile::find)
-            // But News model might not have 'og_image' relation defined?
-            // 'image' relation IS defined in News.php lines 51-54 (as 'image' method?) No, line 51 is 'image'.
-            // Wait, News.php has 'image_id'.
-            // It does NOT have 'image()' relation returning BelongsTo MediaFile?
-            // Line 199 in News.php uses get_file_url using image_id.
-            
-            // Let's load the media files manually to be safe or add relation if possible.
-            // Safe bet is to fetch them here or use get_file_url but return path if possible?
-            // get_file_url returns URL.
-            // Let's rely on finding the media file content.
-            
-            $row->load(['author', 'category', 'tags']);
+            $row->load(['tags']);
             $data = $row->toArray();
+
+            // Map image fields to what frontend expects (featured_*)
+            $data['featured_image_id'] = $row->image_id;
+            $data['featured_image_alt'] = $row->image_alt;
+            $data['featured_image_url'] = $this->getRelativePath($row->image_id);
             
-            // Fetch media files to get paths
-            if ($row->image_id) {
-                $media = \Modules\Media\Models\MediaFile::find($row->image_id);
-                if ($media) {
-                    $data['image_file_path'] = $media->file_path;
-                    $data['image_url'] = get_file_url($row->image_id, 'full');
-                }
-            }
-            if ($row->og_image_id) {
-                $media = \Modules\Media\Models\MediaFile::find($row->og_image_id);
-                if ($media) {
-                    $data['og_image_file_path'] = $media->file_path;
-                    $data['og_image_url'] = get_file_url($row->og_image_id, 'full');
-                }
-            }
-            
+            // SEO Images
+            $data['og_image_url'] = $this->getRelativePath($row->og_image_id);
+            $data['twitter_image_url'] = $this->getRelativePath($row->twitter_image_id);
+
+            // Ensure consistent Arrays for IDs
+            $data['tag_ids'] = $row->tags->pluck('id')->values()->toArray();
+            // related_posts is cast to array in model, so use as is or default to empty
+            $data['related_posts'] = $row->related_posts ?? [];
+
             // Map cat_id to category_id
             $data['category_id'] = $row->cat_id;
+
+            // Remove extra/redundant fields (Strict cleanup)
+            unset($data['image_id']);
+            unset($data['image_url']); 
+            unset($data['image_alt']);
+            unset($data['cat_id']);
+            unset($data['tags']);     // Remove relations objects
+            // User payload HAS category and author, so we MUST keep them
+            // unset($data['category']); 
+            // unset($data['author']);   
+            unset($data['image_file_path']);
+            unset($data['og_image_file_path']);
+            unset($data['twitter_image_file_path']);
+            
+            // Explicitly ensure Twitter fields are present if missing from toArray
+            if (!isset($data['twitter_title'])) $data['twitter_title'] = $row->twitter_title;
+            if (!isset($data['twitter_description'])) $data['twitter_description'] = $row->twitter_description;
+            if (!isset($data['twitter_card'])) $data['twitter_card'] = $row->twitter_card;
 
             // Merge translation data
             if ($translation) {

@@ -38,7 +38,18 @@ class Page extends BaseModel
         'meta_keywords',
         'is_homepage',
         'template_id',
-        'template'
+        'template',
+        // SEO Fields
+        'og_title',
+        'og_description',
+        'og_image_id',
+        'twitter_card',
+        'twitter_title',
+        'twitter_description',
+        'twitter_image_id',
+        'canonical_url',
+        'robots_meta',
+        'schema_markup'
     ];
     protected $slugField     = 'slug';
     protected $slugFromField = 'title';
@@ -129,6 +140,16 @@ class Page extends BaseModel
     public function image()
     {
         return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'image_id');
+    }
+
+    public function og_image()
+    {
+        return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'og_image_id');
+    }
+
+    public function twitter_image()
+    {
+        return $this->belongsTo(\Modules\Media\Models\MediaFile::class, 'twitter_image_id');
     }
 
 }
