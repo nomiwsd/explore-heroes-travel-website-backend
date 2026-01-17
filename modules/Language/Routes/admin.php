@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 Route::match(['get', 'post'],'/','LanguageController@index')->name('language.admin.index');
 Route::match(['get', 'post'],'edit/{id}','LanguageController@edit')->name('language.admin.edit');
 Route::post('bulkEdit','LanguageController@bulkEdit')->name('language.admin.bulkEdit');
+Route::post('setDefault', 'LanguageController@setDefault')->name('language.admin.setDefault');
 
 
 Route::group(['prefix'=>'translation'],function (){

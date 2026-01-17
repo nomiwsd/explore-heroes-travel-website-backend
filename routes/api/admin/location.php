@@ -71,12 +71,19 @@ Route::prefix('module/location')->middleware('auth:sanctum')->group(function () 
         }
         
     })->middleware('permission:location_view');
-    
+
     // Get single location for editing
-    Route::get('/edit/{id}', function ($id) {
+    Route::get('/edit/{id}', function (Request $request, $id) {
         try {
             $loc = Location::findOrFail($id);
-            
+
+            // Get translation if lang param is provided
+            $lang = $request->query('lang');
+            $translation = null;
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $loc->translate($lang);
+            }
+
             // Get image URLs - ensure null if not found
             $imageUrl = null;
             if ($loc->image_id) {
@@ -91,13 +98,13 @@ Route::prefix('module/location')->middleware('auth:sanctum')->group(function () 
             }
             
             $seo = $loc->getSeoMeta();
-            
-            return response()->json([
+
+            $responseData = [
                 'data' => [
                     'id' => $loc->id,
                     'name' => $loc->name,
                     'slug' => $loc->slug,
-                    'content' => $loc->translate()->content,
+                    'content' => $loc->content,
                     'image_id' => $loc->image_id,
                     'image_url' => $imageUrl,
                     'banner_image_id' => $loc->banner_image_id ?? null,
@@ -112,7 +119,7 @@ Route::prefix('module/location')->middleware('auth:sanctum')->group(function () 
                     'show_on_homepage' => $loc->show_on_homepage,
                     'destination_type' => $loc->destination_type ?? 'city',
                     'display_order' => $loc->display_order ?? 0,
-                    'short_description' => $loc->translate()->short_description,
+                    'short_description' => $loc->short_description, // Use model property (which checks translation) or field directly
                     'seo_title' => $seo['seo_title'] ?? '',
                     'seo_desc' => $seo['seo_desc'] ?? '',
                     'tours' => $loc->tours->map(function($tl){
@@ -121,92 +128,73 @@ Route::prefix('module/location')->middleware('auth:sanctum')->group(function () 
                     'created_at' => $loc->created_at,
                     'updated_at' => $loc->updated_at,
                 ],
-            ]);
+            ];
+
+            // Include translation if fetched
+            if ($translation) {
+                $responseData['translation'] = $translation;
+            }
+
+            return response()->json($responseData);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     })->middleware('permission:location_view');
-    
-    // Create location
-    Route::middleware(['auth:sanctum', 'permission:location_create'])->post('/store', function (Request $request) {
+
+    // Create/Update location
+    Route::middleware(['auth:sanctum', 'permission:location_update'])->post('/store/{id?}', function (Request $request, $id = null) {
         try {
-            $loc = new Location();
+            $lang = $request->query('lang') ?: $request->input('lang');
+            $isTranslation = $lang && !is_default_lang($lang);
+
+            if ($id) {
+                $loc = Location::findOrFail($id);
+            } else {
+                $loc = new Location();
+            }
+
             $loc->fill($request->only([
                 'name', 'slug', 'content', 'image_id', 'banner_image_id',
                 'map_lat', 'map_lng', 'map_zoom', 'status', 'parent_id',
-                'is_featured', 'show_on_homepage', 'destination_type', 'display_order', 'gallery'
+                'is_featured',
+                'show_on_homepage',
+                'destination_type',
+                'display_order',
+                'gallery',
+                'short_description'
             ]));
-            $loc->create_user = $request->user()->id ?? 1;
-            $loc->save();
 
-            // Save translation
-            $translation = $loc->translate($request->input('lang', 'en'));
-            $translation->name = $request->input('name');
-            $translation->content = $request->input('content');
-            $translation->short_description = $request->input('short_description');
-            $translation->save();
+            if (!$id) {
+                $loc->create_user = $request->user()->id ?? 1;
+            }
 
-            // SEO
-            $loc->saveSEO($request);
+            if ($isTranslation) {
+                // For translations, don't save the main model, only save translation
+                $loc->saveTranslation($lang, true);
+                $message = 'Translation saved successfully';
+            } else {
+                // For default language, save both main model and translation
+                $loc->save();
+                $loc->saveTranslation($lang ?: 'en', true);
 
-            // Tours
-            $tours = $request->input('assigned_tour_ids');
-            if (is_array($tours)) {
-                Modules\Tour\Models\TourLocation::where('location_id', $loc->id)->delete();
-                foreach ($tours as $tour_id) {
-                    $tl = new Modules\Tour\Models\TourLocation();
-                    $tl->location_id = $loc->id;
-                    $tl->tour_id = $tour_id;
-                    $tl->save();
+                // Save tours only for main language/record
+                $tours = $request->input('assigned_tour_ids');
+                if (is_array($tours)) {
+                    Modules\Tour\Models\TourLocation::where('location_id', $loc->id)->delete();
+                    foreach ($tours as $tour_id) {
+                        $tl = new Modules\Tour\Models\TourLocation();
+                        $tl->location_id = $loc->id;
+                        $tl->tour_id = $tour_id;
+                        $tl->save();
+                    }
                 }
+
+                $message = $id ? 'Location updated successfully' : 'Location created successfully';
             }
             
             return response()->json([
                 'success' => true,
-                'message' => 'Location created successfully',
-                'data' => ['id' => $loc->id],
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    });
-    
-    // Update location
-    Route::middleware(['auth:sanctum', 'permission:location_update'])->post('/store/{id}', function (Request $request, $id) {
-        try {
-            $loc = Location::findOrFail($id);
-            $loc->fill($request->only([
-                'name', 'slug', 'content', 'image_id', 'banner_image_id',
-                'map_lat', 'map_lng', 'map_zoom', 'status', 'parent_id',
-                'is_featured', 'show_on_homepage', 'destination_type', 'display_order', 'gallery'
-            ]));
-            $loc->save();
-
-            // Save translation
-            $translation = $loc->translate($request->input('lang', 'en'));
-            $translation->name = $request->input('name');
-            $translation->content = $request->input('content');
-            $translation->short_description = $request->input('short_description');
-            $translation->save();
-
-            // SEO
-            $loc->saveSEO($request);
-
-            // Tours
-            $tours = $request->input('assigned_tour_ids');
-            if (is_array($tours)) {
-                Modules\Tour\Models\TourLocation::where('location_id', $loc->id)->delete();
-                foreach ($tours as $tour_id) {
-                    $tl = new Modules\Tour\Models\TourLocation();
-                    $tl->location_id = $loc->id;
-                    $tl->tour_id = $tour_id;
-                    $tl->save();
-                }
-            }
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'Location updated successfully',
+                'message' => $message,
                 'data' => ['id' => $loc->id],
             ]);
         } catch (\Exception $e) {

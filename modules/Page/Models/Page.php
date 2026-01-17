@@ -3,14 +3,14 @@ namespace Modules\Page\Models;
 
 use App\BaseModel;
 use Astrotomic\Translatable\Contracts\Translatable as TranslatableContract;
-use Astrotomic\Translatable\Translatable;
+use App\Traits\HasTranslations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Core\Models\SEO;
 
 class Page extends BaseModel
 {
-    use SoftDeletes;
+    use SoftDeletes, HasTranslations;
 
     public function author()
     {
@@ -61,6 +61,7 @@ class Page extends BaseModel
         'title',
         'content',
         'short_desc',
+        'banner_title',
     ];
 
     protected $seo_type = 'page';

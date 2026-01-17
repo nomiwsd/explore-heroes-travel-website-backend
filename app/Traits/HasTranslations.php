@@ -8,6 +8,8 @@
 
 namespace App\Traits;
 
+use Illuminate\Support\Facades\Log;
+
 trait HasTranslations
 {
 
@@ -24,16 +26,29 @@ trait HasTranslations
     public function saveTranslation($locale = false,$saveSEO = false){
         if(is_enable_multi_lang()){
             $class = $this->getTranslationModelName();
-            
+
+            $fillableFields = (new $class)->getFillable();
+            $inputData = collect(request()->input())->only($fillableFields)->toArray();
+
+            // Debug logging
+            Log::info('=== SAVE TRANSLATION DEBUG ===');
+            Log::info('Class: ' . $class);
+            Log::info('Origin ID: ' . $this->getKey());
+            Log::info('Locale: ' . ($locale ?: app()->getLocale()));
+            Log::info('Fillable fields: ' . json_encode($fillableFields));
+            Log::info('Input data after filter: ' . json_encode($inputData));
+
             // Use updateOrCreate to avoid duplicate entry errors
             $translation = $class::updateOrCreate(
                 [
                     'origin_id' => $this->getKey(),
                     'locale' => $locale ?: app()->getLocale(),
                 ],
-                collect(request()->input())->only((new $class)->getFillable())->toArray()
+                $inputData
             );
-            
+
+            Log::info('Translation saved with ID: ' . $translation->id);
+
             if($saveSEO){
                 $translation->saveSEO(request(),$locale);
             }

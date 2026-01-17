@@ -15,6 +15,8 @@ class Language extends BaseModel
         'active',
         'flag',
         'status',
+        'is_default',
+        'is_rtl',
     ];
 
     public function getTranslatedNumberAttribute()

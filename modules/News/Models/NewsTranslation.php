@@ -1,19 +1,28 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: Admin
- * Date: 7/16/2019
- * Time: 2:05 PM
- */
 namespace Modules\News\Models;
 
 use App\BaseModel;
 
+/**
+ * News Translation Model
+ * Contains ONLY translatable text fields from News model
+ */
 class NewsTranslation extends BaseModel
 {
     protected $table = 'core_news_translations';
-    protected $fillable = ['title', 'content', 'meta_title', 'meta_desc', 'meta_keywords'];
+
+    protected $fillable = [
+        // Text fields that need translation
+        'title',
+        'content',
+        'short_desc',
+        'excerpt',
+        'origin_id',
+        'locale'
+    ];
+
     protected $seo_type = 'news_translation';
+
     protected $cleanFields = [
         'content'
     ];

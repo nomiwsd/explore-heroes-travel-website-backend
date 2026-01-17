@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Modules\News\Models\News;
 use Modules\News\Models\NewsCategory;
+use Illuminate\Support\Str;
 
 // =====================================================
 // NEWS/BLOG MANAGEMENT
@@ -74,11 +75,19 @@ Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     })->middleware('permission:news_view');
-    
+
     // Get single post for editing
-    Route::get('/edit/{id}', function ($id) {
+    Route::get('/edit/{id}', function (Request $request, $id) {
         try {
             $post = News::with(['category', 'author', 'tags'])->findOrFail($id);
+
+            // Get translation if lang param is provided
+            $lang = $request->query('lang');
+            $translation = null;
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $post->translate($lang);
+            }
+
             $seoMeta = $post->getSeoMeta();
             
             // Get tag IDs from pivot table relationship
@@ -116,14 +125,15 @@ Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
                     $ogImageUrl = url($media->file_path);
                 }
             }
-            
-            return response()->json([
+
+            $responseData = [
                 'data' => [
                     'id' => $post->id,
                     'title' => $post->title,
                     'slug' => $post->slug,
                     'content' => $post->content,
                     'excerpt' => $post->excerpt,
+                    'short_desc' => $post->short_desc,
 
                     // Mapped Image Fields (Featured)
                     'featured_image_id' => $post->image_id,
@@ -177,15 +187,22 @@ Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
                         'email' => $post->author->email,
                     ] : ($post->create_user ? [
                         'id' => $post->create_user,
-                        'display_name' => \App\User::find($post->create_user)?->getDisplayName() ?? 'Unknown',
+                        'display_name' => \App\User::find($post->create_user)?->display_name ?? 'Unknown',
                         'email' => \App\User::find($post->create_user)?->email ?? '',
                     ] : [
                         'id' => auth()->id(),
-                        'display_name' => auth()->user()?->getDisplayName() ?? 'Unknown',
+                        'display_name' => auth()->user()?->display_name ?? 'Unknown',
                         'email' => auth()->user()?->email ?? '',
                     ]),
                 ],
-            ]);
+            ];
+
+            // Include translation if fetched
+            if ($translation) {
+                $responseData['translation'] = $translation;
+            }
+
+            return response()->json($responseData);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
@@ -196,6 +213,9 @@ Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
         // Store/Update post
         Route::middleware('permission:news_update')->post('/store/{id?}', function (Request $request, $id = null) {
             try {
+                $lang = $request->query('lang') ?: $request->input('lang');
+                $isTranslation = $lang && !is_default_lang($lang);
+
                 if ($id) {
                     $post = News::findOrFail($id);
                 } else {
@@ -203,98 +223,106 @@ Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
                     $post->create_user = auth()->id();
                     $post->author_id = auth()->id(); // Set author to current user for new posts
                 }
-                
-                // Basic fields
-                $post->title = $request->input('title');
-                $post->slug = $request->input('slug') ?: \Str::slug($request->input('title'));
-                $post->content = $request->input('content');
-                $post->short_desc = $request->input('short_desc');
-                $post->excerpt = $request->input('excerpt');
-                
-                // Image fields
-                $post->image_id = $request->input('image_id');
-                $post->og_image_id = $request->input('og_image_id');
-                $post->image_alt = $request->input('image_alt');
-                
-                // Category and location (map category_id to cat_id)
-                $post->cat_id = $request->input('cat_id') ?: $request->input('category_id');
-                $post->location_id = $request->input('location_id');
-                
-                // Status and featured
-                $post->status = $request->input('status', 'publish');
-                $post->is_featured = $request->input('is_featured', 0);
-                
-                // Additional fields
-                $post->author_bio = $request->input('author_bio');
-                $post->reading_time = $request->input('reading_time');
-                
-                // PUBLISH DATE (Saved to explicit column)
-                if ($request->has('publish_date') && !empty($request->input('publish_date'))) {
-                    $post->publish_date = \Carbon\Carbon::parse($request->input('publish_date'));
+
+                // Only update main post fields if NOT a translation save
+                if (!$isTranslation) {
+                    // Basic fields
+                    $post->title = $request->input('title');
+                    $post->slug = $request->input('slug') ?: Str::slug($request->input('title'));
+                    $post->content = $request->input('content');
+                    $post->short_desc = $request->input('short_desc');
+                    $post->excerpt = $request->input('excerpt');
+
+                    // Image fields
+                    $post->image_id = $request->input('image_id');
+                    $post->og_image_id = $request->input('og_image_id');
+                    $post->image_alt = $request->input('image_alt');
+
+                    // Category and location (map category_id to cat_id)
+                    $post->cat_id = $request->input('cat_id') ?: $request->input('category_id');
+                    $post->location_id = $request->input('location_id');
+
+                    // Status and featured
+                    $post->status = $request->input('status', 'publish');
+                    $post->is_featured = $request->input('is_featured', 0);
+
+                    // Additional fields
+                    $post->author_bio = $request->input('author_bio');
+                    $post->reading_time = $request->input('reading_time');
+
+                    // PUBLISH DATE (Saved to explicit column)
+                    if ($request->has('publish_date') && !empty($request->input('publish_date'))) {
+                        $post->publish_date = \Carbon\Carbon::parse($request->input('publish_date'));
+                    }
+
+                    // Handle Featured Image ID (Frontend sends featured_image_id, backend uses image_id)
+                    if ($request->has('featured_image_id')) {
+                        $post->image_id = $request->input('featured_image_id');
+                    }
+                    if ($request->has('featured_image_alt')) {
+                        $post->image_alt = $request->input('featured_image_alt');
+                    }
+
+                    // SEO & Social Fields (Saved directly to News model as per fillable)
+                    $post->og_title = $request->input('og_title');
+                    $post->og_description = $request->input('og_description');
+
+                    $post->twitter_title = $request->input('twitter_title');
+                    $post->twitter_description = $request->input('twitter_description');
+                    $post->twitter_card = $request->input('twitter_card');
+                    $post->twitter_image_id = $request->input('twitter_image_id');
+
+                    $post->canonical_url = $request->input('canonical_url');
+                    $post->robots_meta = $request->input('robots_meta');
+                    $post->schema_markup = $request->input('schema_markup');
+
+                    // Array fields (stored as JSON)
+                    if ($request->has('related_posts')) {
+                        $post->related_posts = json_encode($request->input('related_posts'));
+                    }
+                    if ($request->has('gallery')) {
+                        $post->gallery = json_encode($request->input('gallery'));
+                    }
+
+                    // Meta keywords (saved directly to news table)
+                    $post->meta_keywords = $request->input('meta_keywords');
+
+                    // Set author_id if not set (for existing posts without author)
+                    if (!$post->author_id) {
+                        $post->author_id = auth()->id();
+                    }
+
+                    $post->update_user = auth()->id();
+                    $post->save();
+
+                    // Handle tags through pivot table (core_news_tag)
+                    if ($request->has('tag_ids')) {
+                        $post->saveTag([], $request->input('tag_ids'));
+                    }
+
+                    // Save SEO meta data to separate bc_seo table
+                    if ($request->has('meta_title') || $request->has('meta_desc') || $request->has('meta_keywords')) {
+                        $seoRequest = new Request([
+                            'seo_title' => $request->input('meta_title'),
+                            'seo_desc' => $request->input('meta_desc'),
+                            'seo_image' => $request->input('og_image_id') ?: $request->input('image_id'),
+                        ]);
+                        $post->saveSEO($seoRequest);
+                    }
+
+                    // Save default translation
+                    $post->saveTranslation($lang ?: 'en', true);
+                    $message = 'Post saved successfully';
                 } else {
-                     // Default to now if publishing and no date provided? Or keep null.
-                     // User payload sends explicit date.
-                }
-
-                // Handle Featured Image ID (Frontend sends featured_image_id, backend uses image_id)
-                if ($request->has('featured_image_id')) {
-                     $post->image_id = $request->input('featured_image_id');
-                }
-                if ($request->has('featured_image_alt')) {
-                     $post->image_alt = $request->input('featured_image_alt');
-                }
-
-                // SEO & Social Fields (Saved directly to News model as per fillable)
-                $post->og_title = $request->input('og_title');
-                $post->og_description = $request->input('og_description');
-                
-                $post->twitter_title = $request->input('twitter_title');
-                $post->twitter_description = $request->input('twitter_description');
-                $post->twitter_card = $request->input('twitter_card');
-                $post->twitter_image_id = $request->input('twitter_image_id');
-                
-                $post->canonical_url = $request->input('canonical_url');
-                $post->robots_meta = $request->input('robots_meta');
-                $post->schema_markup = $request->input('schema_markup');
-                
-                // Array fields (stored as JSON)
-                if ($request->has('related_posts')) {
-                    $post->related_posts = json_encode($request->input('related_posts'));
-                }
-                if ($request->has('gallery')) {
-                    $post->gallery = json_encode($request->input('gallery'));
-                }
-                
-                // Meta keywords (saved directly to news table)
-                $post->meta_keywords = $request->input('meta_keywords');
-                
-                // Set author_id if not set (for existing posts without author)
-                if (!$post->author_id) {
-                    $post->author_id = auth()->id();
-                }
-                
-                $post->update_user = auth()->id();
-                $post->save();
-                
-                // Handle tags through pivot table (core_news_tag)
-                if ($request->has('tag_ids')) {
-                    $post->saveTag([], $request->input('tag_ids'));
-                }
-                
-                // Save SEO meta data to separate bc_seo table
-                if ($request->has('meta_title') || $request->has('meta_desc') || $request->has('meta_keywords')) {
-                    $seoRequest = new Request([
-                        'seo_title' => $request->input('meta_title'),
-                        'seo_desc' => $request->input('meta_desc'),
-                        'seo_image' => $request->input('og_image_id') ?: $request->input('image_id'),
-                    ]);
-                    $post->saveSEO($seoRequest);
+                    // Just save translation
+                    $post->saveTranslation($lang, true);
+                    $message = 'Translation saved successfully';
                 }
                 
                 return response()->json([
                     'success' => true,
                     'data' => ['id' => $post->id],
-                    'message' => 'Post saved successfully',
+                    'message' => $message,
                 ]);
             } catch (\Exception $e) {
                 return response()->json(['error' => $e->getMessage()], 500);
@@ -445,7 +473,7 @@ Route::prefix('module/news/category')->middleware('auth:sanctum')->group(functio
             }
             
             $category->name = $request->input('name');
-            $category->slug = $request->input('slug') ?: \Str::slug($request->input('name'));
+            $category->slug = $request->input('slug') ?: Str::slug($request->input('name'));
             // Frontend sends 'description', backend stores as 'content'
             $category->content = $request->input('content') ?: $request->input('description');
             $category->image_id = $request->input('image_id');
@@ -588,7 +616,7 @@ Route::prefix('module/news/tag')->middleware('auth:sanctum')->group(function () 
             }
             
             $tag->name = $request->input('name');
-            $tag->slug = $request->input('slug') ?: \Str::slug($request->input('name'));
+            $tag->slug = $request->input('slug') ?: Str::slug($request->input('name'));
             $tag->content = $request->input('content');
             $tag->save();
             

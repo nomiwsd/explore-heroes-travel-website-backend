@@ -3,6 +3,8 @@ namespace Modules\Language\Admin;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Redirect;
 use Illuminate\Validation\Rule;
 use Modules\AdminController;
 use Modules\Language\Models\Language;
@@ -30,7 +32,10 @@ class LanguageController extends AdminController
                 $row = new Language($request->input());
                 $row->save();
             }
-            return redirect(route('language.admin.index'))->with('success', __("Language created"));
+            if ($request->wantsJson()) {
+                return response()->json(['url' => route('language.admin.index')]);
+            }
+            return Redirect::route('language.admin.index')->with('success', __("Language created"));
         }
         $listLanguage = Language::query() ;
         if (!empty($search = $request->query('s'))) {
@@ -93,7 +98,7 @@ class LanguageController extends AdminController
                         'data' => $row
                     ]);
                 }
-                return redirect()->back()->with('success', __('Language updated'));
+                return Redirect::back()->with('success', __('Language updated'));
             }
         }
 
@@ -123,6 +128,33 @@ class LanguageController extends AdminController
         return view('Language::admin.language.detail', $data);
     }
 
+    public function setDefault(Request $request)
+    {
+        $this->checkPermission('language_manage');
+        $id = $request->input('id');
+        $lang = Language::find($id);
+        if (!$lang) {
+            return response()->json(['status' => 0, 'message' => __('Language not found')]);
+        }
+
+        // Update site_locale setting
+        if (function_exists('setting_update_item')) {
+            setting_update_item('site_locale', $lang->locale);
+        } else {
+            DB::table('core_settings')->updateOrInsert(['name' => 'site_locale'], ['val' => $lang->locale]);
+        }
+
+        // Update is_default column
+        Language::where('id', '!=', $id)->update(['is_default' => 0]);
+        $lang->is_default = 1;
+        $lang->save();
+
+        Cache::forget('locale_active_0');
+        Cache::forget('locale_active_1');
+
+        return response()->json(['status' => 1, 'message' => __('Default language updated')]);
+    }
+
     public function bulkEdit(Request $request)
     {
         $this->checkPermission('language_manage');
@@ -130,10 +162,16 @@ class LanguageController extends AdminController
         $ids = $request->input('ids');
         $action = $request->input('action');
         if (empty($ids) or !is_array($ids)) {
-            return redirect()->back()->with('error', __("Select at least 1 item!"));
+            if ($request->wantsJson()) {
+                return response()->json(['status' => 0, 'message' => __("Select at least 1 item!")]);
+            }
+            return Redirect::back()->with('error', __("Select at least 1 item!"));
         }
         if (empty($action)) {
-            return redirect()->back()->with('error', __('Select an Action!'));
+            if ($request->wantsJson()) {
+                return response()->json(['status' => 0, 'message' => __('Select an Action!')]);
+            }
+            return Redirect::back()->with('error', __('Select an Action!'));
         }
         if ($action == "delete") {
             foreach ($ids as $id) {
@@ -150,6 +188,9 @@ class LanguageController extends AdminController
         }
         Cache::forget('locale_active_0');
         Cache::forget('locale_active_1');
-        return redirect()->back()->with('success', __('Updated success!'));
+        if ($request->wantsJson()) {
+            return response()->json(['status' => 1, 'message' => __('Updated success!')]);
+        }
+        return Redirect::back()->with('success', __('Updated success!'));
     }
 }

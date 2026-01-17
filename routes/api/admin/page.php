@@ -6,11 +6,25 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Log;
 use Modules\Page\Models\Page;
+use Illuminate\Support\Str;
 
 // =====================================================
 // PAGE MANAGEMENT
 // =====================================================
+Route::get('module/page/debug-locale', function () {
+    return response()->json([
+        'site_locale' => setting_item('site_locale'),
+        'get_main_lang' => get_main_lang(),
+        'app_locale' => app()->getLocale(),
+        'is_default_en' => is_default_lang('en'),
+        'is_default_ar' => is_default_lang('ar'),
+        'is_default_empty' => is_default_lang(''),
+        'is_default_null' => is_default_lang(null),
+    ]);
+})->middleware('auth:sanctum');
+
 Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
     // Get all pages
     Route::get('/', function (Request $request) {
@@ -45,11 +59,18 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
         }
 
     })->middleware('permission:page_view');
-    
+
     // Get single page for editing
-    Route::get('/edit/{id}', function ($id) {
+    Route::get('/edit/{id}', function (Request $request, $id) {
         try {
             $page = Page::with('author')->findOrFail($id);
+
+            // Get translation if lang param is provided
+            $lang = $request->query('lang');
+            $translation = null;
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $page->translate($lang);
+            }
 
             // Resolve Image URLs
             $featuredImageUrl = $page->image_id ? '/storage/' . \Modules\Media\Models\MediaFile::find($page->image_id)?->file_path : null;
@@ -57,8 +78,8 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
             $ogImageUrl = $page->og_image_id ? '/storage/' . \Modules\Media\Models\MediaFile::find($page->og_image_id)?->file_path : null;
             $twitterImageUrl = $page->twitter_image_id ? '/storage/' . \Modules\Media\Models\MediaFile::find($page->twitter_image_id)?->file_path : null;
 
-            
-            return response()->json([
+
+            $responseData = [
                 'data' => [
                     'id' => $page->id,
                     'title' => $page->title,
@@ -109,7 +130,13 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
                     'created_at' => $page->created_at,
                     'updated_at' => $page->updated_at,
                 ],
-            ]);
+            ];
+
+            if ($translation) {
+                $responseData['translation'] = $translation;
+            }
+
+            return response()->json($responseData);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
@@ -119,61 +146,98 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
     // Store/Update page
     Route::middleware(['permission:page_create'])->post('/store/{id?}', function (Request $request, $id = null) {
         try {
+            $lang = $request->query('lang') ?: $request->input('lang');
+            $is_default = is_default_lang($lang);
+            $isTranslation = $lang && !$is_default;
+
+            // DEBUG: Write to file directly
+            $debugData = [
+                'time' => date('Y-m-d H:i:s'),
+                'id' => $id,
+                'query_lang' => $request->query('lang'),
+                'input_lang' => $request->input('lang'),
+                'detected_lang' => $lang,
+                'is_default' => $is_default,
+                'isTranslation' => $isTranslation,
+                'will_save_main_table' => !$isTranslation,
+            ];
+            file_put_contents(storage_path('logs/page_debug.log'), json_encode($debugData) . "\n", FILE_APPEND);
+
             if ($id) {
                 $page = Page::findOrFail($id);
             } else {
                 $page = new Page();
                 $page->create_user = auth()->id();
             }
-            
-            $page->title = $request->input('title');
-            $page->slug = $request->input('slug') ?: \Str::slug($request->input('title'));
-            $page->content = $request->input('content');
-            $page->short_desc = $request->input('short_desc');
-            
-            $page->image_id = $request->input('image_id');
-            $page->banner_image_id = $request->input('banner_image_id');
-            $page->banner_title = $request->input('banner_title');
 
-            $page->template = $request->input('template', 'default');
-            $page->status = $request->input('status', 'publish');
-            $page->display_order = $request->input('display_order', 0);
-            
-            // Booleans
-            $page->show_in_menu = $request->boolean('show_in_menu');
-            $page->show_in_header = $request->boolean('show_in_header');
-            $page->show_in_footer = $request->boolean('show_in_footer');
-            $page->is_homepage = $request->boolean('is_homepage');
-            $page->header_style = $request->input('header_style', 'normal');
-            
-            // SEO Fields
-            $page->meta_title = $request->input('meta_title') ?? $request->input('seo_title');
-            $page->meta_desc = $request->input('meta_desc') ?? $request->input('seo_description');
-            $page->meta_keywords = $request->input('meta_keywords');
+            $allowedFields = [
+                'title',
+                'slug',
+                'content',
+                'status',
+                'short_desc',
+                'image_id',
+                'header_style',
+                'custom_logo',
+                'banner_title',
+                'banner_image_id',
+                'display_order',
+                'show_in_menu',
+                'show_in_header',
+                'show_in_footer',
+                'is_homepage',
+                'template_id',
+                'template',
+                // SEO Fields
+                'og_title',
+                'og_description',
+                'og_image_id',
+                'og_image_url',
+                'twitter_card',
+                'twitter_title',
+                'twitter_description',
+                'twitter_image_id',
+                'twitter_image_url',
+                'canonical_url',
+                'robots_meta',
+                'schema_markup'
+            ];
 
-            $page->og_title = $request->input('og_title');
-            $page->og_description = $request->input('og_description');
-            $page->og_image_id = $request->input('og_image_id');
-            
-            $page->twitter_title = $request->input('twitter_title');
-            $page->twitter_description = $request->input('twitter_description');
-            $page->twitter_image_id = $request->input('twitter_image_id');
-            $page->twitter_card = $request->input('twitter_card');
-            
-            $page->canonical_url = $request->input('canonical_url');
-            $page->robots_meta = $request->input('robots_meta');
-            $page->schema_markup = $request->input('schema_markup');
+            if (!$isTranslation) {
+                // For main language, fill all global fields
+                $page->fill($request->only($allowedFields));
 
-            $page->update_user = auth()->id();
-            
-            $page->save();
-            
+                // Handle booleans explicitly if needed
+                $page->show_in_menu = $request->has('show_in_menu') ? $request->boolean('show_in_menu') : $page->show_in_menu;
+                $page->show_in_header = $request->has('show_in_header') ? $request->boolean('show_in_header') : $page->show_in_header;
+                $page->show_in_footer = $request->has('show_in_footer') ? $request->boolean('show_in_footer') : $page->show_in_footer;
+                $page->is_homepage = $request->has('is_homepage') ? $request->boolean('is_homepage') : $page->is_homepage;
+
+                $page->update_user = auth()->id();
+                $page->save();
+
+                // Write to debug log
+                file_put_contents(storage_path('logs/page_debug.log'), "SAVED MAIN TABLE\n", FILE_APPEND);
+            } else {
+                // Write to debug log
+                file_put_contents(storage_path('logs/page_debug.log'), "SKIPPED MAIN TABLE SAVE\n", FILE_APPEND);
+            }
+
+            // Save translation (this uses request()->input() and filters by PageTranslation fillables)
+            $res = $page->saveTranslation($lang ?: get_main_lang(), true);
+
             return response()->json([
                 'success' => true,
                 'data' => ['id' => $page->id],
-                'message' => 'Page saved successfully',
+                'message' => $isTranslation ? 'Translation saved successfully' : 'Page saved successfully',
+                'debug' => [
+                    'lang' => $lang,
+                    'isTranslation' => $isTranslation,
+                    'mainTableSaved' => !$isTranslation,
+                ],
             ]);
         } catch (\Exception $e) {
+            Log::error('Page store error: ' . $e->getMessage());
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });

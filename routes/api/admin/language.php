@@ -5,6 +5,8 @@
  */
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Route;
 use Modules\Language\Models\Language;
 
@@ -12,215 +14,43 @@ use Modules\Language\Models\Language;
 // LANGUAGE MANAGEMENT
 // =====================================================
 Route::prefix('module/language')->middleware('auth:sanctum')->group(function () {
-    // Get all languages
-    Route::get('/', function (Request $request) {
-        try {
-            $query = Language::query();
-            
-            if ($request->has('s') && $request->s) {
-                $query->where(function ($q) use ($request) {
-                    $q->where('name', 'LIKE', '%' . $request->s . '%')
-                      ->orWhere('locale', 'LIKE', '%' . $request->s . '%');
-                });
-            }
-            
-            $languages = $query->orderBy('id', 'desc')->get();
-            
-            return response()->json([
-                'data' => $languages->map(function ($lang) {
-                    return [
-                        'id' => $lang->id,
-                        'name' => $lang->name,
-                        'locale' => $lang->locale,
-                        'flag' => $lang->flag,
-                        'status' => $lang->status,
-                        'is_default' => $lang->is_default,
-                        'is_rtl' => $lang->is_rtl,
-                    ];
-                }),
-                'total' => $languages->count(),
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    });
-    
-    // Get single language
-    Route::get('/edit/{id}', function ($id) {
-        try {
-            $language = Language::findOrFail($id);
-            
-            return response()->json([
-                'data' => [
-                    'id' => $language->id,
-                    'name' => $language->name,
-                    'locale' => $language->locale,
-                    'flag' => $language->flag,
-                    'status' => $language->status,
-                    'is_default' => $language->is_default,
-                    'is_rtl' => $language->is_rtl,
-                ],
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    });
-    
-    // Store/Update language
-    Route::post('/store/{id?}', function (Request $request, $id = null) {
-        try {
-            if ($id) {
-                $language = Language::findOrFail($id);
-            } else {
-                $language = new Language();
-            }
-            
-            $language->name = $request->input('name');
-            $language->locale = $request->input('locale');
-            $language->flag = $request->input('flag');
-            $language->status = $request->input('status', 'publish');
-            $language->is_default = $request->input('is_default', false);
-            $language->is_rtl = $request->input('is_rtl', false);
-            
-            // If setting as default, unset other defaults
-            if ($language->is_default) {
-                Language::where('id', '!=', $language->id)->update(['is_default' => false]);
-            }
-            
-            $language->save();
-            
-            return response()->json([
-                'success' => true,
-                'data' => ['id' => $language->id],
-                'message' => 'Language saved successfully',
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    });
-    
-    // Delete language
-    Route::delete('/{id}', function ($id) {
-        try {
-            $language = Language::findOrFail($id);
-            
-            if ($language->is_default) {
-                return response()->json(['error' => 'Cannot delete default language'], 400);
-            }
-            
-            $language->delete();
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'Language deleted successfully',
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    });
-    
-    // Set as default
-    Route::post('/setDefault/{id}', function ($id) {
-        try {
-            Language::where('is_default', true)->update(['is_default' => false]);
-            
-            $language = Language::findOrFail($id);
-            $language->is_default = true;
-            $language->save();
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'Default language updated',
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    });
-    
+    // Get all languages & Create (Index handles both)
+    Route::match(['get', 'post'], '/', [\Modules\Language\Admin\LanguageController::class, 'index']);
+
+    // Get single language & Update (Edit handles both)
+    Route::match(['get', 'post'], '/edit/{id}', [\Modules\Language\Admin\LanguageController::class, 'edit']);
+
+    // Dedicated default setter (Post body style)
+    Route::post('/setDefault', [\Modules\Language\Admin\LanguageController::class, 'setDefault']);
+
     // Bulk edit
-    Route::post('/bulkEdit', function (Request $request) {
-        try {
-            $ids = $request->input('ids', []);
-            $action = $request->input('action');
-            
-            if (empty($ids)) {
-                return response()->json(['error' => 'No items selected'], 400);
-            }
-            
-            // Don't allow bulk delete of default language
-            $defaultLang = Language::where('is_default', true)->first();
-            if ($action === 'delete' && $defaultLang && in_array($defaultLang->id, $ids)) {
-                return response()->json(['error' => 'Cannot delete default language'], 400);
-            }
-            
-            switch ($action) {
-                case 'delete':
-                    Language::whereIn('id', $ids)->delete();
-                    break;
-                case 'publish':
-                    Language::whereIn('id', $ids)->update(['status' => 'publish']);
-                    break;
-                case 'draft':
-                    Language::whereIn('id', $ids)->update(['status' => 'draft']);
-                    break;
-                default:
-                    return response()->json(['error' => 'Invalid action'], 400);
-            }
-            
-            return response()->json([
-                'success' => true,
-                'message' => ucfirst($action) . ' completed successfully',
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    });
+    Route::post('/bulkEdit', [\Modules\Language\Admin\LanguageController::class, 'bulkEdit']);
+
+    // Delete (mapped to bulkEdit or specific delete? Controller bulkEdit handles delete via action='delete')
+    // But RESTful delete might expect DELETE method.
+    // LanguageController doesn't have a 'delete' method, it uses bulkEdit mostly? 
+    // Or users index logic?
+    // Let's check bulkEdit logic. It handles delete.
+    // Frontend uses: deleteLanguage(id) -> POST bulkEdit (action: delete) ?
+    // Check language-service.ts
 });
 
 // =====================================================
 // TRANSLATION MANAGEMENT
 // =====================================================
 Route::prefix('module/language/translations')->middleware('auth:sanctum')->group(function () {
-    // Get all translations for a language
-    Route::get('/{locale}', function ($locale, Request $request) {
-        try {
-            $group = $request->input('group', 'general');
-            
-            // Try to load from database first
-            $translations = \DB::table('bc_translations')
-                ->where('locale', $locale)
-                ->where('group', $group)
-                ->get()
-                ->pluck('value', 'key')
-                ->toArray();
-            
-            // If empty, try to load from JSON file
-            if (empty($translations)) {
-                $filePath = lang_path($locale . '.json');
-                if (file_exists($filePath)) {
-                    $translations = json_decode(file_get_contents($filePath), true) ?? [];
-                }
-            }
-            
-            return response()->json([
-                'locale' => $locale,
-                'group' => $group,
-                'translations' => $translations,
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['translations' => []]);
-        }
-    });
+    // Get all translations for a language (paginated with stats)
+    Route::get('/{locale}', [\Modules\Language\Admin\TranslationsController::class, 'getTranslationsApi']);
     
     // Update translations
     Route::post('/{locale}', function ($locale, Request $request) {
         try {
             $translations = $request->input('translations', []);
             $group = $request->input('group', 'general');
-            
+
             // Check if translations table exists
-            if (!\Schema::hasTable('bc_translations')) {
-                \Schema::create('bc_translations', function ($table) {
+            if (!Schema::hasTable('bc_translations')) {
+                Schema::create('bc_translations', function ($table) {
                     $table->id();
                     $table->string('locale', 10);
                     $table->string('group', 50)->default('general');
@@ -232,7 +62,7 @@ Route::prefix('module/language/translations')->middleware('auth:sanctum')->group
             }
             
             foreach ($translations as $key => $value) {
-                \DB::table('bc_translations')->updateOrInsert(
+                DB::table('bc_translations')->updateOrInsert(
                     ['locale' => $locale, 'group' => $group, 'key' => $key],
                     ['value' => $value, 'updated_at' => now()]
                 );
@@ -316,4 +146,19 @@ Route::prefix('module/language/translations')->middleware('auth:sanctum')->group
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
+
+    // Build translations (generate JSON files) - calls TranslationsController
+    Route::post('/{locale}/build', [\Modules\Language\Admin\TranslationsController::class, 'buildTranslationsApi']);
+
+    // Save translations
+    Route::post('/{locale}/save', [\Modules\Language\Admin\TranslationsController::class, 'saveTranslationsApi']);
+
+    // Get translation stats
+    Route::get('/{locale}/stats', [\Modules\Language\Admin\TranslationsController::class, 'getStatsApi']);
+
+    // Scan for new translatable strings
+    Route::post('/scan', [\Modules\Language\Admin\TranslationsController::class, 'scanForStringsApi']);
+
+    // Import translations from JSON file
+    Route::post('/import', [\Modules\Language\Admin\TranslationsController::class, 'loadTranslateJson']);
 });

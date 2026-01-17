@@ -7,6 +7,9 @@
  */
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Route;
 use Modules\Core\Models\Settings;
 use Modules\Language\Models\Language;
@@ -36,14 +39,14 @@ Route::prefix('menus')->group(function () {
             
             if (!$menu) {
                 // Log for debugging
-                \Log::info("Menu not found for location: $location");
+                Log::info("Menu not found for location: $location");
                 return response()->json(null);
             }
             
             // Parse items from JSON string
             $items = $menu->items_json ?? [];
-            
-            \Log::info("Menu found for location: $location, items count: " . count($items));
+
+            Log::info("Menu found for location: $location, items count: " . count($items));
             
             return response()->json([
                 'id' => $menu->id,
@@ -52,7 +55,7 @@ Route::prefix('menus')->group(function () {
                 'locations' => $menu->locations,
             ]);
         } catch (\Exception $e) {
-            \Log::error("Menu location error: " . $e->getMessage());
+            Log::error("Menu location error: " . $e->getMessage());
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
@@ -117,16 +120,18 @@ Route::prefix('destinations')->group(function () {
             if ($request->has('homepage') && $request->homepage == '1') {
                 $query->where('show_on_homepage', 1);
             }
-            
+
+            $lang = $request->query('lang');
             $destinations = $query->orderBy('display_order', 'asc')->orderBy('name', 'asc')->get();
             
             return response()->json([
-                'data' => $destinations->map(function ($dest) {
+                'data' => $destinations->map(function ($dest) use ($lang) {
+                    $translation = $lang ? $dest->translate($lang) : null;
                     return [
                         'id' => $dest->id,
-                        'name' => $dest->name,
+                        'name' => $translation->name ?? $dest->name,
                         'slug' => $dest->slug,
-                        'short_description' => $dest->translate()->short_description ?? ($dest->content ? \Illuminate\Support\Str::limit(strip_tags($dest->content), 150) : null),
+                        'short_description' => $translation->short_description ?? ($dest->translate()->short_description ?? ($dest->content ? \Illuminate\Support\Str::limit(strip_tags($dest->content), 150) : null)),
                         'image_url' => $dest->image_id ? get_file_url($dest->image_id, 'full') : null,
                         'banner_image_url' => $dest->banner_image_id ? get_file_url($dest->banner_image_id, 'full') : null,
                         'map_lat' => $dest->map_lat,
@@ -144,9 +149,9 @@ Route::prefix('destinations')->group(function () {
             return response()->json(['data' => [], 'total' => 0, 'error' => $e->getMessage()]);
         }
     });
-    
+
     // Get single destination by slug
-    Route::get('/{slug}', function ($slug) {
+    Route::get('/{slug}', function (Request $request, $slug) {
         try {
             $destination = Location::where('slug', $slug)
                 ->where('status', 'publish')
@@ -155,8 +160,10 @@ Route::prefix('destinations')->group(function () {
             if (!$destination) {
                 return response()->json(['error' => 'Destination not found'], 404);
             }
-            
-            $translation = $destination->translate();
+
+            $lang = $request->query('lang');
+            $translation = $destination->translate($lang);
+
             $seo = $destination->getSeoMeta();
 
             // Get assigned tours via pivot table
@@ -192,8 +199,8 @@ Route::prefix('destinations')->group(function () {
                     'id' => $destination->id,
                     'name' => $translation->name ?? $destination->name,
                     'slug' => $destination->slug,
-                    'short_description' => $translation->short_description,
-                    'content' => $translation->content,
+                    'short_description' => $translation->short_description ?? $destination->short_description,
+                    'content' => $translation->content ?? $destination->content,
                     'image_url' => $destination->image_id ? get_file_url($destination->image_id, 'full') : null,
                     'banner_image_url' => $destination->banner_image_id ? get_file_url($destination->banner_image_id, 'full') : null,
                     'gallery_images' => $gallery,
@@ -201,8 +208,8 @@ Route::prefix('destinations')->group(function () {
                     'map_lat' => $destination->map_lat,
                     'map_lng' => $destination->map_lng,
                     'map_zoom' => $destination->map_zoom,
-                    'meta_title' => $seo['seo_title'] ?? $destination->name,
-                    'meta_description' => $seo['seo_desc'] ?? $translation->short_description,
+                    'meta_title' => $translation->name ?? $seo['seo_title'] ?? $destination->name,
+                    'meta_description' => $translation->short_description ?? $seo['seo_desc'],
                     'og_title' => $destination->og_title,
                     'og_description' => $destination->og_description,
                     'og_image_url' => $destination->og_image_id ? get_file_url($destination->og_image_id, 'full') : null,
@@ -239,7 +246,7 @@ Route::prefix('destinations')->group(function () {
 // Get tour categories (tour types)
 Route::get('/tour-categories', function () {
     try {
-        $categories = \DB::table('bc_tour_category')
+        $categories = DB::table('bc_tour_category')
             ->where('status', 'publish')
             ->whereNull('deleted_at')
             ->select('id', 'name', 'slug')
@@ -258,7 +265,7 @@ Route::get('/tour-categories', function () {
 // Get tour attributes/themes (travel styles)
 Route::get('/tour-themes', function () {
     try {
-        $travelStylesAttr = \DB::table('bc_attrs')
+        $travelStylesAttr = DB::table('bc_attrs')
             ->where('service', 'tour')
             ->where('slug', 'travel-styles')
             ->first();
@@ -266,8 +273,8 @@ Route::get('/tour-themes', function () {
         if (!$travelStylesAttr) {
             return response()->json(['data' => [], 'total' => 0]);
         }
-        
-        $themes = \DB::table('bc_terms')
+
+        $themes = DB::table('bc_terms')
             ->where('attr_id', $travelStylesAttr->id)
             ->whereNull('deleted_at')
             ->select('id', 'name', 'slug', 'icon', 'image_id')
@@ -286,7 +293,7 @@ Route::get('/tour-themes', function () {
 // Get tour facilities/features
 Route::get('/tour-facilities', function () {
     try {
-        $facilitiesAttr = \DB::table('bc_attrs')
+        $facilitiesAttr = DB::table('bc_attrs')
             ->where('service', 'tour')
             ->where('slug', 'facilities')
             ->first();
@@ -294,8 +301,8 @@ Route::get('/tour-facilities', function () {
         if (!$facilitiesAttr) {
             return response()->json(['data' => [], 'total' => 0]);
         }
-        
-        $facilities = \DB::table('bc_terms')
+
+        $facilities = DB::table('bc_terms')
             ->where('attr_id', $facilitiesAttr->id)
             ->whereNull('deleted_at')
             ->select('id', 'name', 'slug', 'icon', 'image_id')
@@ -398,12 +405,14 @@ Route::prefix('tours')->group(function () {
             
             // Pagination
             $perPage = $request->get('per_page', 12);
+            $lang = $request->query('lang');
             $tours = $query->orderBy('is_featured', 'desc')
                 ->orderBy('created_at', 'desc')
                 ->paginate($perPage);
             
             return response()->json([
-                'data' => $tours->map(function ($tour) {
+                'data' => $tours->map(function ($tour) use ($lang) {
+                    $translation = $lang ? $tour->translate($lang) : null;
                     // Fetch categories
                     $categories = collect([]);
                      if (!empty($tour->category_ids)) {
@@ -418,15 +427,15 @@ Route::prefix('tours')->group(function () {
                      if (!empty($tour->tour_themes)) {
                          $themeIds = is_string($tour->tour_themes) ? json_decode($tour->tour_themes, true) : $tour->tour_themes;
                          if (is_array($themeIds) && count($themeIds) > 0) {
-                             $themes = \DB::table('bc_terms')->whereIn('id', $themeIds)->select('id', 'name', 'slug', 'icon')->get();
+                            $themes = DB::table('bc_terms')->whereIn('id', $themeIds)->select('id', 'name', 'slug', 'icon')->get();
                          }
                      }
 
                     return [
                         'id' => $tour->id,
-                        'title' => $tour->title,
+                        'title' => $translation->title ?? $tour->title,
                         'slug' => $tour->slug,
-                        'short_description' => $tour->short_desc,
+                        'short_description' => $translation->short_desc ?? $tour->short_desc,
                         'price' => $tour->price,
                         'sale_price' => $tour->sale_price,
                         'duration' => $tour->duration,
@@ -459,9 +468,9 @@ Route::prefix('tours')->group(function () {
             return response()->json(['data' => [], 'total' => 0, 'error' => $e->getMessage()]);
         }
     });
-    
+
     // Get single tour by slug
-    Route::get('/{slug}', function ($slug) {
+    Route::get('/{slug}', function (Request $request, $slug) {
         try {
             $tour = Tour::where('slug', $slug)
                 ->where('status', 'publish')
@@ -470,17 +479,35 @@ Route::prefix('tours')->group(function () {
             if (!$tour) {
                 return response()->json(['error' => 'Tour not found'], 404);
             }
-            
-            // Get itinerary
-            $itinerary = [];
-            if ($tour->itinerary) {
-                $itinerary = is_string($tour->itinerary) ? json_decode($tour->itinerary, true) : $tour->itinerary;
+
+            // Get translation if lang parameter is provided
+            $lang = $request->query('lang');
+            $translation = null;
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $tour->translate($lang);
             }
-            
-            // Get FAQs
+
+            // Get translatable fields (use translation if available, else main tour)
+            $title = ($translation && $translation->title) ? $translation->title : $tour->title;
+            $shortDesc = ($translation && $translation->short_desc) ? $translation->short_desc : $tour->short_desc;
+            $address = ($translation && $translation->address) ? $translation->address : $tour->address;
+            $conditions = ($translation && $translation->conditions) ? $translation->conditions : $tour->conditions;
+            $cancellationPolicy = ($translation && $translation->cancellation_policy) ? $translation->cancellation_policy : $tour->cancellation_policy;
+            $childPolicy = ($translation && $translation->child_policy) ? $translation->child_policy : $tour->child_policy;
+            $paymentTerms = ($translation && $translation->payment_terms) ? $translation->payment_terms : $tour->payment_terms;
+
+            // Get itinerary (check translation first)
+            $itinerary = [];
+            $itinerarySrc = ($translation && $translation->itinerary) ? $translation->itinerary : $tour->itinerary;
+            if ($itinerarySrc) {
+                $itinerary = is_string($itinerarySrc) ? json_decode($itinerarySrc, true) : $itinerarySrc;
+            }
+
+            // Get FAQs (check translation first)
             $faqs = [];
-            if ($tour->faqs) {
-                $faqs = is_string($tour->faqs) ? json_decode($tour->faqs, true) : $tour->faqs;
+            $faqsSrc = ($translation && $translation->faqs) ? $translation->faqs : $tour->faqs;
+            if ($faqsSrc) {
+                $faqs = is_string($faqsSrc) ? json_decode($faqsSrc, true) : $faqsSrc;
             }
             
             // Get highlights (Prioritize new column)
@@ -490,15 +517,17 @@ Route::prefix('tours')->group(function () {
             } elseif ($tour->highlight) {
                 $highlights = is_string($tour->highlight) ? json_decode($tour->highlight, true) : $tour->highlight;
             }
-            
-            // Get include/exclude
+
+            // Get include/exclude (check translation first)
             $include = [];
             $exclude = [];
-            if ($tour->include) {
-                $include = is_string($tour->include) ? json_decode($tour->include, true) : $tour->include;
+            $inclusionsSrc = ($translation && $translation->inclusions) ? $translation->inclusions : ($tour->inclusions ?? $tour->include);
+            $exclusionsSrc = ($translation && $translation->exclusions) ? $translation->exclusions : ($tour->exclusions ?? $tour->exclude);
+            if ($inclusionsSrc) {
+                $include = is_string($inclusionsSrc) ? json_decode($inclusionsSrc, true) : $inclusionsSrc;
             }
-            if ($tour->exclude) {
-                $exclude = is_string($tour->exclude) ? json_decode($tour->exclude, true) : $tour->exclude;
+            if ($exclusionsSrc) {
+                $exclude = is_string($exclusionsSrc) ? json_decode($exclusionsSrc, true) : $exclusionsSrc;
             }
             
             // Get gallery images (Robust ID/Path handling)
@@ -566,9 +595,9 @@ Route::prefix('tours')->group(function () {
             return response()->json([
                 'data' => [
                     'id' => $tour->id,
-                    'title' => $tour->title,
+                    'title' => $title,
                     'slug' => $tour->slug,
-                    'short_description' => $tour->short_desc,
+                    'short_description' => $shortDesc,
                     'price' => $tour->price,
                     'sale_price' => $tour->sale_price,
                     'duration' => $tour->duration,
@@ -597,21 +626,21 @@ Route::prefix('tours')->group(function () {
                     'hero_slider' => $hero_slider,
                     'itinerary' => $itinerary,
                     // include/exclude removed (raw), use inclusions/exclusions
-                    'inclusions' => $tour->inclusions ?? $include, 
-                    'exclusions' => $tour->exclusions ?? $exclude, 
+                    'inclusions' => $include,
+                    'exclusions' => $exclude,
                     'highlights' => $highlights,
                     'faqs' => $faqs,
                     'tour_themes' => collect($tourThemesIds ?? [])->map(function($id) {
-                        $term = \DB::table('bc_terms')->where('id', $id)->first();
+                        $term = DB::table('bc_terms')->where('id', $id)->first();
                         return $term ? ['id' => $term->id, 'name' => $term->name, 'icon' => $term->icon, 'slug' => $term->slug] : ['id' => $id, 'name' => "Theme $id"];
                     })->toArray(),
                     'suitable_for' => $tour->suitable_for,
                     'cities_covered' => $tour->cities_covered,
                     'availability_dates' => $tour->availability_dates,
-                    'conditions' => $tour->conditions,
-                    'cancellation_policy' => $tour->cancellation_policy,
-                    'child_policy' => $tour->child_policy,
-                    'payment_terms' => $tour->payment_terms,
+                    'conditions' => $conditions,
+                    'cancellation_policy' => $cancellationPolicy,
+                    'child_policy' => $childPolicy,
+                    'payment_terms' => $paymentTerms,
                     'meta_title' => $tour->seo_title,
                     'meta_description' => $tour->seo_desc,
                     // OG/Twitter fields kept if defined in interface or likely needed for SEO Head
@@ -625,7 +654,7 @@ Route::prefix('tours')->group(function () {
                     'canonical_url' => $tour->canonical_url,
                     'robots_meta' => $tour->robots_meta,
                     'schema_markup' => $tour->schema_markup,
-                    'address' => $tour->address,
+                    'address' => $address,
                     // start_date, end_date, enable_fixed_date, min_day_before_booking removed (not in PublicTourDetail shown or assumed extra)
                     'review_score' => $tour->review_score,
                     'tour_expert' => $tour->tourExpert ? [
@@ -726,7 +755,7 @@ Route::prefix('reviews')->group(function () {
     // Get approved/featured reviews for homepage
     Route::get('/', function (Request $request) {
         try {
-            $query = \DB::table('bc_review')
+            $query = DB::table('bc_review')
                 ->where('status', 'approved');
             
             // Filter by featured
@@ -786,7 +815,7 @@ Route::prefix('reviews')->group(function () {
     // Get reviews for a specific tour/object (public)
     Route::get('/{objectModel}/{objectId}', function ($objectModel, $objectId) {
         try {
-            $reviews = \DB::table('bc_review')
+            $reviews = DB::table('bc_review')
                 ->where('object_model', $objectModel)
                 ->where('object_id', $objectId)
                 ->where('status', 'approved')
@@ -897,11 +926,13 @@ Route::prefix('news')->group(function () {
             if ($request->has('s') && $request->s) {
                 $query->where('title', 'LIKE', '%' . $request->s . '%');
             }
-            
+
+            $lang = $request->query('lang');
             $posts = $query->orderBy('id', 'desc')->paginate($request->per_page ?? 10);
-            
+
             // Transform data with images and author
-            $data = $posts->map(function ($post) {
+            $data = $posts->map(function ($post) use ($lang) {
+                $translation = $lang ? $post->translate($lang) : null;
                 // Get author info
                 $author = null;
                 if ($post->create_user) {
@@ -934,10 +965,10 @@ Route::prefix('news')->group(function () {
 
                 return [
                     'id' => $post->id,
-                    'title' => $post->title,
+                    'title' => $translation->title ?? $post->title,
                     'slug' => $post->slug,
-                    'content' => $post->content,
-                    'excerpt' => $post->excerpt,
+                    'content' => $translation->content ?? $post->content,
+                    'excerpt' => $translation->excerpt ?? $post->excerpt,
                     'status' => $post->status,
                     'is_featured' => $post->is_featured,
                     'cat_id' => $post->cat_id,
@@ -966,13 +997,15 @@ Route::prefix('news')->group(function () {
     Route::get('/featured', function (Request $request) {
         try {
             $limit = $request->get('limit', 6);
+            $lang = $request->query('lang');
             $posts = \Modules\News\Models\News::where('status', 'publish')
                 ->where('is_featured', 1)
                 ->orderBy('id', 'desc')
                 ->limit($limit)
                 ->get();
-            
-            $data = $posts->map(function ($post) {
+
+            $data = $posts->map(function ($post) use ($lang) {
+                $translation = $lang ? $post->translate($lang) : null;
                 // Get author info
                 $author = null;
                 if ($post->create_user) {
@@ -1005,10 +1038,10 @@ Route::prefix('news')->group(function () {
 
                 return [
                     'id' => $post->id,
-                    'title' => $post->title,
+                    'title' => $translation->title ?? $post->title,
                     'slug' => $post->slug,
-                    'content' => $post->content,
-                    'excerpt' => $post->excerpt,
+                    'content' => $translation->content ?? $post->content,
+                    'excerpt' => $translation->excerpt ?? $post->excerpt,
                     'is_featured' => $post->is_featured,
                     'cat_id' => $post->cat_id,
                     'image_id' => $post->image_id,
@@ -1047,9 +1080,9 @@ Route::prefix('news')->group(function () {
             return response()->json(['data' => []]);
         }
     });
-    
+
     // Get single post by slug
-    Route::get('/{slug}', function ($slug) {
+    Route::get('/{slug}', function (Request $request, $slug) {
         try {
             $post = \Modules\News\Models\News::where('slug', $slug)
                 ->where('status', 'publish')
@@ -1058,6 +1091,13 @@ Route::prefix('news')->group(function () {
             
             if (!$post) {
                 return response()->json(['error' => 'Post not found'], 404);
+            }
+
+            // Get translation if lang param is provided
+            $lang = $request->query('lang');
+            $translation = null;
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $post->translate($lang);
             }
             
             // Get category
@@ -1123,11 +1163,15 @@ Route::prefix('news')->group(function () {
                     ->get();
             }
 
-            // 3. Map to output format
+            // 3. Map to output format (Translate related posts titles too?) 
+            // For now, let's keep related posts simple or translate them if possible. 
+            // Ideally related posts should also respect lang, but it might be expensive.
+            // Let's stick to main post translation first.
+
             $related = $relatedPostsResolved->map(function ($p) use ($getImageUrl) {
                 return [
                     'id' => $p->id,
-                    'title' => $p->title,
+                    'title' => $p->title, // Could translate this too if needed
                     'slug' => $p->slug,
                     'excerpt' => $p->excerpt,
                     'image_url' => $getImageUrl($p->image_id),
@@ -1139,10 +1183,10 @@ Route::prefix('news')->group(function () {
             return response()->json([
                 'data' => [
                     'id' => $post->id,
-                    'title' => $post->title,
+                    'title' => $translation->title ?? $post->title,
                     'slug' => $post->slug,
-                    'content' => $post->content,
-                    'excerpt' => $post->excerpt,
+                    'content' => $translation->content ?? $post->content,
+                    'excerpt' => $translation->excerpt ?? $post->excerpt,
                     'image_url' => $getImageUrl($post->image_id),
                     'image_alt' => $post->image_alt ?? null,
                     'cat_id' => $post->cat_id,
@@ -1157,7 +1201,7 @@ Route::prefix('news')->group(function () {
                     'reading_time' => $post->reading_time ?? null,
                     'publish_date' => $post->created_at ? $post->created_at->format('Y-m-d') : null,
                     'created_at' => $post->created_at,
-                    'created_at' => $post->created_at,
+                    // Duplicate key removal: 'created_at' => $post->created_at,
                     'og_title' => $post->og_title,
                     'og_description' => $post->og_description,
                     'og_image_url' => $post->og_image_id ? parse_url(get_file_url($post->og_image_id, 'full'), PHP_URL_PATH) : null,
@@ -1197,12 +1241,24 @@ Route::prefix('pages')->group(function () {
             }
             
             $pages = $query->orderBy('display_order', 'asc')->get();
-            
+
+            // Transform with translation if lang is provided
+            $lang = $request->query('lang');
+            $needTranslation = $lang && !is_default_lang($lang);
+
             return response()->json([
-                'data' => $pages->map(function ($page) {
+                'data' => $pages->map(function ($page) use ($needTranslation, $lang) {
+                    $title = $page->title;
+                    if ($needTranslation) {
+                        $translation = $page->translate($lang);
+                        if ($translation && $translation->title) {
+                            $title = $translation->title;
+                        }
+                    }
+
                     return [
                         'id' => $page->id,
-                        'title' => $page->title,
+                        'title' => $title,
                         'slug' => $page->slug,
                         'url' => $page->slug === 'home' ? '/' : '/' . $page->slug,
                     ];
@@ -1212,9 +1268,9 @@ Route::prefix('pages')->group(function () {
             return response()->json(['data' => [], 'error' => $e->getMessage()]);
         }
     });
-    
+
     // Get homepage
-    Route::get('/homepage', function () {
+    Route::get('/homepage', function (Request $request) {
         try {
             $page = \Modules\Page\Models\Page::where('status', 'publish')
                 ->where('is_homepage', true)
@@ -1232,6 +1288,19 @@ Route::prefix('pages')->group(function () {
             }
             
             $pageData = $page->toArray();
+
+            // Handle Translations
+            $lang = $request->query('lang');
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $page->translate($lang);
+                if ($translation) {
+                    $pageData['title'] = $translation->title ?? $pageData['title'];
+                    $pageData['content'] = $translation->content ?? $pageData['content'];
+                    $pageData['short_desc'] = $translation->short_desc ?? $pageData['short_desc'];
+                    $pageData['banner_title'] = $translation->banner_title ?? $pageData['banner_title'];
+                }
+            }
+
             $pageData['og_image_url'] = $page->og_image_id ? get_file_url($page->og_image_id, 'full') : null;
             $pageData['twitter_image_url'] = $page->twitter_image_id ? get_file_url($page->twitter_image_id, 'full') : null;
             $pageData['banner_image_url'] = $page->banner_image_id ? get_file_url($page->banner_image_id, 'full') : null;
@@ -1241,9 +1310,9 @@ Route::prefix('pages')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Get page by slug (must be last due to wildcard)
-    Route::get('/{slug}', function ($slug) {
+    Route::get('/{slug}', function (Request $request, $slug) {
         try {
             $page = \Modules\Page\Models\Page::where('slug', $slug)
                 ->where('status', 'publish')
@@ -1254,6 +1323,19 @@ Route::prefix('pages')->group(function () {
             }
             
             $pageData = $page->toArray();
+
+            // Handle Translations
+            $lang = $request->query('lang');
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $page->translate($lang);
+                if ($translation) {
+                    $pageData['title'] = $translation->title ?? $pageData['title'];
+                    $pageData['content'] = $translation->content ?? $pageData['content'];
+                    $pageData['short_desc'] = $translation->short_desc ?? $pageData['short_desc'];
+                    $pageData['banner_title'] = $translation->banner_title ?? $pageData['banner_title'];
+                }
+            }
+
             $pageData['og_image_url'] = $page->og_image_id ? get_file_url($page->og_image_id, 'full') : null;
             $pageData['twitter_image_url'] = $page->twitter_image_id ? get_file_url($page->twitter_image_id, 'full') : null;
             
@@ -1269,9 +1351,9 @@ Route::prefix('pages')->group(function () {
 // =====================================================
 Route::post('/contact/store', function (Request $request) {
     try {
-        $table = \Schema::hasTable('bc_contact_submissions') ? 'bc_contact_submissions' : 'bc_contact';
-        
-        $id = \DB::table($table)->insertGetId([
+        $table = Schema::hasTable('bc_contact_submissions') ? 'bc_contact_submissions' : 'bc_contact';
+
+        $id = DB::table($table)->insertGetId([
             'name' => $request->input('name'),
             'email' => $request->input('email'),
             'phone' => $request->input('phone'),
@@ -1313,3 +1395,39 @@ Route::prefix('admin/page-settings')->middleware('auth:sanctum')->group(function
     Route::get('/{slug}/preview-token', [\App\Http\Controllers\Api\PageSettingsController::class, 'getPreviewToken']);
 });
 
+
+// =====================================================
+// SEO API (Public Access)
+// =====================================================
+Route::prefix('module/core/seo')->group(function () {
+    // Global SEO Settings
+    Route::get('/global', function () {
+        try {
+            $settings = Settings::getSettings('seo');
+            return response()->json($settings);
+        } catch (\Exception $e) {
+            return response()->json([]);
+        }
+    });
+
+    // Sitemap Settings
+    Route::get('/sitemap', function () {
+        try {
+            $settings = Settings::getSettings('sitemap');
+            return response()->json($settings);
+        } catch (\Exception $e) {
+            return response()->json([]);
+        }
+    });
+
+    // Robots.txt
+    Route::get('/robots', function () {
+        try {
+            $robotsPath = public_path('robots.txt');
+            $content = file_exists($robotsPath) ? file_get_contents($robotsPath) : "User-agent: *\nAllow: /\n\nSitemap: " . config('app.url') . "/sitemap.xml";
+            return response()->json(['content' => $content]);
+        } catch (\Exception $e) {
+            return response()->json(['content' => '']);
+        }
+    });
+});

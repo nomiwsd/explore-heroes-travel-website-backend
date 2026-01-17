@@ -3,9 +3,10 @@
 namespace Modules\Page\Admin;
 
 use Modules\Page\Hook;
-use function Couchbase\defaultDecoder;
+
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Redirect;
 use Modules\AdminController;
 use Modules\Page\Models\Page;
 use Modules\Page\Models\PageTranslation;
@@ -203,7 +204,7 @@ class PageController extends AdminController
             if ($request->wantsJson()) {
                 return response()->json(['error' => __("DEMO MODE: Disable update")], 403);
             }
-            return redirect()->back()->with('danger', __("DEMO MODE: Disable update"));
+            return Redirect::back()->with('danger', __("DEMO MODE: Disable update"));
         }
         $request->validate([
             'title' => 'required'
@@ -213,19 +214,20 @@ class PageController extends AdminController
             $this->checkPermission('page_update');
             $row = Page::find($id);
             if (empty($row)) {
-                return redirect(route('page.admin.index'));
+                return Redirect::to(route('page.admin.index'));
             }
         } else {
             $this->checkPermission('page_create');
             $row = new Page();
         }
 
-        $row->fill($request->input());
-        if ($request->input('slug')) {
-            $row->slug = $request->input('slug');
+        if (!$request->query('lang') || is_default_lang($request->query('lang'))) {
+            $row->fill($request->input());
+            if ($request->input('slug')) {
+                $row->slug = $request->input('slug');
+            }
+            $row->save();
         }
-
-        $row->save();
 
         do_action(Hook::PAGE_BEFORE_SAVING, $row, $request);
         $row->saveOriginOrTranslation($request->query('lang'), true);
@@ -235,9 +237,9 @@ class PageController extends AdminController
         }
 
         if ($id > 0) {
-            return back()->with('success', __('Page updated'));
+            return Redirect::back()->with('success', __('Page updated'));
         } else {
-            return redirect()->route('page.admin.edit', ['id' => $row->id])->with('success', $id > 0 ? __('Page updated') : __('Page created'));
+            return Redirect::to(route('page.admin.edit', ['id' => $row->id]))->with('success', $id > 0 ? __('Page updated') : __('Page created'));
         }
     }
 
@@ -260,15 +262,15 @@ class PageController extends AdminController
             if ($request->wantsJson()) {
                  return response()->json(['error' => __("DEMO MODE: Disable update")], 403);
             }
-            return redirect()->back()->with('danger', __("DEMO MODE: Disable update"));
+            return Redirect::back()->with('danger', __("DEMO MODE: Disable update"));
         }
         $ids = $request->input('ids');
         $action = $request->input('action');
         if (empty($ids)) {
-            return redirect()->back()->with('error', __('Please select at least 1 item!'));
+            return Redirect::back()->with('error', __('Please select at least 1 item!'));
         }
         if (empty($action)) {
-            return redirect()->back()->with('error', __('No Action is selected!'));
+            return Redirect::back()->with('error', __('No Action is selected!'));
         }
         if ($action == "delete") {
             foreach ($ids as $id) {
@@ -295,7 +297,7 @@ class PageController extends AdminController
         if ($request->wantsJson()) {
             return response()->json(['success' => true, 'message' => __('Update success!')]);
         }
-        return redirect()->back()->with('success', __('Update success!'));
+        return Redirect::back()->with('success', __('Update success!'));
     }
 
 

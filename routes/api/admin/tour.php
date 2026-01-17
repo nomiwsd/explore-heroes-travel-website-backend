@@ -7,6 +7,9 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Modules\Tour\Models\Tour;
 use Modules\Tour\Models\TourCategory;
 
@@ -19,7 +22,7 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
     // Get tour experts
     Route::get('/experts', function () {
         try {
-            $users = \DB::table('users')
+            $users = DB::table('users')
                 ->whereNull('deleted_at')
                 ->select('id', 'name', 'email')
                 ->orderBy('name')
@@ -35,14 +38,14 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
     Route::get('/themes', function () {
         try {
             // Get or create the travel-styles attribute
-            $travelStylesAttr = \DB::table('bc_attrs')
+            $travelStylesAttr = DB::table('bc_attrs')
                 ->where('service', 'tour')
                 ->where('slug', 'travel-styles')
                 ->first();
             
             if (!$travelStylesAttr) {
                 // Create the attribute if it doesn't exist
-                $attrId = \DB::table('bc_attrs')->insertGetId([
+                $attrId = DB::table('bc_attrs')->insertGetId([
                     'name' => 'Travel Styles',
                     'slug' => 'travel-styles',
                     'service' => 'tour',
@@ -53,7 +56,7 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
                 $attrId = $travelStylesAttr->id;
             }
             
-            $themes = \DB::table('bc_terms')
+            $themes = DB::table('bc_terms')
                 ->where('attr_id', $attrId)
                 ->whereNull('deleted_at')
                 ->select('id', 'name', 'slug', 'icon', 'image_id', 'attr_id', 'created_at')
@@ -73,13 +76,13 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
     Route::post('/themes/store/{id?}', function (Request $request, $id = null) {
         try {
             // Get the attr_id
-            $travelStylesAttr = \DB::table('bc_attrs')
+            $travelStylesAttr = DB::table('bc_attrs')
                 ->where('service', 'tour')
                 ->where('slug', 'travel-styles')
                 ->first();
             
             if (!$travelStylesAttr) {
-                $attrId = \DB::table('bc_attrs')->insertGetId([
+                $attrId = DB::table('bc_attrs')->insertGetId([
                     'name' => 'Travel Styles',
                     'slug' => 'travel-styles',
                     'service' => 'tour',
@@ -92,7 +95,7 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
             
             $data = [
                 'name' => $request->input('name'),
-                'slug' => $request->input('slug') ?: \Str::slug($request->input('name')),
+                'slug' => $request->input('slug') ?: Str::slug($request->input('name')),
                 'icon' => $request->input('icon'),
                 'image_id' => $request->input('image_id'),
                 'attr_id' => $attrId,
@@ -100,11 +103,11 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
             ];
             
             if ($id) {
-                \DB::table('bc_terms')->where('id', $id)->update($data);
+                DB::table('bc_terms')->where('id', $id)->update($data);
                 $themeId = $id;
             } else {
                 $data['created_at'] = now();
-                $themeId = \DB::table('bc_terms')->insertGetId($data);
+                $themeId = DB::table('bc_terms')->insertGetId($data);
             }
             
             return response()->json([
@@ -119,7 +122,7 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
     // Delete tour theme
     Route::delete('/themes/{id}', function ($id) {
         try {
-            \DB::table('bc_terms')->where('id', $id)->update(['deleted_at' => now()]);
+            DB::table('bc_terms')->where('id', $id)->update(['deleted_at' => now()]);
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -284,10 +287,17 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
     })->middleware('permission:tour_view');
 
     // Get single tour for editing
-    Route::get('/edit/{id}', function ($id) {
+    Route::get('/edit/{id}', function (Request $request, $id) {
         try {
             $tour = Tour::with(['location', 'category_tour', 'tourExpert'])->findOrFail($id);
-            
+
+            // Get translation if lang param is provided
+            $lang = $request->query('lang');
+            $translation = null;
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $tour->translate($lang);
+            }
+
             $toArray = fn($value) => is_array($value) ? $value : (
                 is_string($value) && !empty($value) ? json_decode($value, true) ?? [] : []
             );
@@ -310,8 +320,8 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
                     'avatar' => $tour->tourExpert->avatar_id ? get_file_url($tour->tourExpert->avatar_id, 'thumb') : null,
                 ];
             }
-            
-            return response()->json([
+
+            $responseData = [
                 'data' => [
                     'id' => (int) $tour->id,
                     'title' => $tour->title ?? '',
@@ -388,7 +398,14 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
                         'name' => $tour->author->getDisplayName() ?? $tour->author->name ?? $tour->author->first_name,
                     ] : null,
                 ],
-            ]);
+            ];
+
+            // Include translation if fetched
+            if ($translation) {
+                $responseData['translation'] = $translation;
+            }
+
+            return response()->json($responseData);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
@@ -397,6 +414,9 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
     // Create/Update tour (protected)
     Route::middleware('permission:tour_update')->post('/store/{id?}', function (Request $request, $id = null) {
         try {
+            $lang = $request->query('lang') ?: $request->input('lang');
+            $isTranslation = $lang && !is_default_lang($lang);
+
             if ($id) {
                 $tour = Tour::findOrFail($id);
             } else {
@@ -425,15 +445,26 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
             if (!$id) {
                 $tour->create_user = $request->user()->id ?? 1;
             }
-            
-            $tour->save();
+
+            // Use saveOriginOrTranslation for proper translation handling
+            if ($isTranslation) {
+                // For translations, don't save the main tour, only save translation
+                $tour->saveTranslation($lang, true);
+                $message = 'Translation saved successfully';
+            } else {
+                // For default language, save both main tour and translation
+                $tour->save();
+                $tour->saveTranslation($lang ?: 'en', true);
+                $message = $id ? 'Tour updated successfully' : 'Tour created successfully';
+            }
             
             return response()->json([
                 'success' => true,
-                'message' => $id ? 'Tour updated successfully' : 'Tour created successfully',
+                'message' => $message,
                 'data' => ['id' => (int) $tour->id],
             ]);
         } catch (\Exception $e) {
+            Log::error('Tour store error: ' . $e->getMessage());
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });

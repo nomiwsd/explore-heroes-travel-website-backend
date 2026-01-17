@@ -15,9 +15,16 @@ Route::get('/','PageController@index')->name('page.admin.index');
 Route::match(['get'],'/create','PageController@create')->name('page.admin.create');
 
 // route for edit page
-Route::get('/edit/{id}', function ($id) {
+Route::get('/edit/{id}', function (Request $request, $id) {
     try {
         $page = Page::with('author')->findOrFail($id);
+
+        // Get translation if lang param is provided and not default language
+        $lang = $request->query('lang');
+        $translation = null;
+        if ($lang && !is_default_lang($lang)) {
+            $translation = $page->translate($lang);
+        }
 
         // Resolve Image URLs
         $featuredImageUrl = $page->image_id ? '/storage/' . MediaFile::find($page->image_id)?->file_path : null;
@@ -76,6 +83,7 @@ Route::get('/edit/{id}', function ($id) {
                 'created_at' => $page->created_at,
                 'updated_at' => $page->updated_at,
             ],
+            'translation' => $translation,
         ]);
     } catch (\Exception $e) {
         return response()->json(['error' => $e->getMessage()], 500);
@@ -87,59 +95,68 @@ Route::match(['get'],'/builder/{id}','PageController@toBuilder')->name('page.adm
 // Store/Update page
 Route::post('/store/{id?}', function (Request $request, $id = null) {
     try {
+        $lang = $request->query('lang') ?: $request->input('lang');
+        $isTranslation = $lang && !is_default_lang($lang);
+
         if ($id) {
             $page = Page::findOrFail($id);
         } else {
             $page = new Page();
             $page->create_user = auth()->id();
         }
-        
-        $page->title = $request->input('title');
-        $page->slug = $request->input('slug') ?: \Str::slug($request->input('title'));
-        $page->content = $request->input('content');
-        $page->short_desc = $request->input('short_desc');
-        
-        $page->image_id = $request->input('image_id');
-        $page->banner_image_id = $request->input('banner_image_id');
-        $page->banner_title = $request->input('banner_title');
 
-        $page->template = $request->input('template', 'default');
-        $page->status = $request->input('status', 'publish');
-        $page->display_order = $request->input('display_order', 0);
-        
-        // Booleans
-        $page->show_in_menu = $request->boolean('show_in_menu');
-        $page->show_in_header = $request->boolean('show_in_header');
-        $page->show_in_footer = $request->boolean('show_in_footer');
-        $page->is_homepage = $request->boolean('is_homepage');
-        $page->header_style = $request->input('header_style', 'normal');
-        
-        // SEO Fields
-        $page->meta_title = $request->input('meta_title') ?? $request->input('seo_title');
-        $page->meta_desc = $request->input('meta_desc') ?? $request->input('seo_description');
-        $page->meta_keywords = $request->input('meta_keywords');
+        // Only save to main table for default language
+        if (!$isTranslation) {
+            $page->title = $request->input('title');
+            $page->slug = $request->input('slug') ?: \Illuminate\Support\Str::slug($request->input('title'));
+            $page->content = $request->input('content');
+            $page->short_desc = $request->input('short_desc');
 
-        $page->og_title = $request->input('og_title');
-        $page->og_description = $request->input('og_description');
-        $page->og_image_id = $request->input('og_image_id');
-        
-        $page->twitter_title = $request->input('twitter_title');
-        $page->twitter_description = $request->input('twitter_description');
-        $page->twitter_image_id = $request->input('twitter_image_id');
-        $page->twitter_card = $request->input('twitter_card');
-        
-        $page->canonical_url = $request->input('canonical_url');
-        $page->robots_meta = $request->input('robots_meta');
-        $page->schema_markup = $request->input('schema_markup');
+            $page->image_id = $request->input('image_id');
+            $page->banner_image_id = $request->input('banner_image_id');
+            $page->banner_title = $request->input('banner_title');
 
-        $page->update_user = auth()->id();
-        
-        $page->save();
+            $page->template = $request->input('template', 'default');
+            $page->status = $request->input('status', 'publish');
+            $page->display_order = $request->input('display_order', 0);
+
+            // Booleans
+            $page->show_in_menu = $request->boolean('show_in_menu');
+            $page->show_in_header = $request->boolean('show_in_header');
+            $page->show_in_footer = $request->boolean('show_in_footer');
+            $page->is_homepage = $request->boolean('is_homepage');
+            $page->header_style = $request->input('header_style', 'normal');
+
+            // SEO Fields
+            $page->meta_title = $request->input('meta_title') ?? $request->input('seo_title');
+            $page->meta_desc = $request->input('meta_desc') ?? $request->input('seo_description');
+            $page->meta_keywords = $request->input('meta_keywords');
+
+            $page->og_title = $request->input('og_title');
+            $page->og_description = $request->input('og_description');
+            $page->og_image_id = $request->input('og_image_id');
+
+            $page->twitter_title = $request->input('twitter_title');
+            $page->twitter_description = $request->input('twitter_description');
+            $page->twitter_image_id = $request->input('twitter_image_id');
+            $page->twitter_card = $request->input('twitter_card');
+
+            $page->canonical_url = $request->input('canonical_url');
+            $page->robots_meta = $request->input('robots_meta');
+            $page->schema_markup = $request->input('schema_markup');
+
+            $page->update_user = auth()->id();
+
+            $page->save();
+        }
+
+        // Save translation for the given language
+        $page->saveTranslation($lang ?: get_main_lang(), true);
         
         return response()->json([
             'success' => true,
             'data' => ['id' => $page->id],
-            'message' => 'Page saved successfully',
+            'message' => $isTranslation ? 'Translation saved successfully' : 'Page saved successfully',
         ]);
     } catch (\Exception $e) {
         return response()->json(['error' => $e->getMessage()], 500);

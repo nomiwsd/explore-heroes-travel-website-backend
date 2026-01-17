@@ -7,8 +7,7 @@
     use Kalnoy\Nestedset\NodeTrait;
     use Modules\Media\Helpers\FileHelper;
     use Illuminate\Database\Eloquent\SoftDeletes;
-    use Modules\Core\Models\SEO;
-    use Modules\Property\Models\Property;
+use Modules\Core\Models\SEO;
 
     class Location extends BaseModel
     {
@@ -157,10 +156,6 @@
             return $data;
         }
 
-        public function properties()
-        {
-            return $this->hasMany(Property::class, 'location_id');
-        }
 
         public function tours()
         {

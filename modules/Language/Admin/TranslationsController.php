@@ -3,6 +3,7 @@ namespace Modules\Language\Admin;
 
 use function Clue\StreamFilter\fun;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Redirect;
 use Modules\AdminController;
 use Modules\Language\Models\Language;
 use Modules\Language\Models\Translation;
@@ -110,7 +111,7 @@ class TranslationsController extends AdminController
                 }
             }
         }
-        return redirect()->back()->with('success', __("Translation saved"));
+        return Redirect::back()->with('success', __("Translation saved"));
     }
 
     public function build($id)
@@ -124,10 +125,10 @@ class TranslationsController extends AdminController
         }
         $file = base_path('resources/lang/' . $lang->locale . '.json');
         if (!is_writable(base_path('resources/lang'))) {
-            return redirect($back)->with('error', __("Folder: resources/lang is not write-able. Please contact your hosting provider"));
+            return Redirect::to($back)->with('error', __("Folder: resources/lang is not write-able. Please contact your hosting provider"));
         }
         if (file_exists($file) and !is_writable($file)) {
-            return redirect($back)->with('error', __("File: :file_name is not write-able. Please contact your hosting provider", ['file_name' => 'resources/lang/' . $lang->locale . '.json']));
+            return Redirect::to($back)->with('error', __("File: :file_name is not write-able. Please contact your hosting provider", ['file_name' => 'resources/lang/' . $lang->locale . '.json']));
         }
         $query = Translation::select([
             'core_translations.*',
@@ -150,7 +151,7 @@ class TranslationsController extends AdminController
         fclose($myfile);
         $lang->last_build_at = date('Y-m-d H:i:s');
         $lang->save();
-        return redirect(route('language.admin.translations.index'))->with('success', __("Re-build language file for: :name success", ['name' => $lang->name]));
+        return Redirect::to(route('language.admin.translations.index'))->with('success', __("Re-build language file for: :name success", ['name' => $lang->name]));
     }
 
     public function loadStrings(){
@@ -161,17 +162,17 @@ class TranslationsController extends AdminController
         $back = route('language.admin.translations.index');
 
         if(!is_file($file)){
-            return redirect($back)->with('error', __("Default language source does not exists"));
+            return Redirect::to($back)->with('error', __("Default language source does not exists"));
         }
 
         $content = file_get_contents($file);
         if(empty($content)){
-            return redirect($back)->with('error', __("Default language source empty"));
+            return Redirect::to($back)->with('error', __("Default language source empty"));
         }
 
-        $json = \GuzzleHttp\json_decode($content,true);
+        $json = json_decode($content, true);
         if(empty($json)){
-            return redirect($back)->with('error', __("Default language source do not have any strings"));
+            return Redirect::to($back)->with('error', __("Default language source do not have any strings"));
         }
 
 
@@ -189,17 +190,17 @@ class TranslationsController extends AdminController
             }
         }
 
-        return redirect($back)->with('success', __("Loaded :count strings",['count'=>count($json)]));
+        return Redirect::to($back)->with('success', __("Loaded :count strings", ['count' => count($json)]));
     }
     public function genDefault(){
 
         $back = route('language.admin.translations.index');
         $file = base_path('resources/lang/default.json');
         if (!is_writable(base_path('resources/lang'))) {
-            return redirect($back)->with('error', __("Folder: resources/lang is not write-able. Please contact your hosting provider"));
+            return Redirect::to($back)->with('error', __("Folder: resources/lang is not write-able. Please contact your hosting provider"));
         }
         if (file_exists($file) and !is_writable($file)) {
-            return redirect($back)->with('error', __("File: :file_name is not write-able. Please contact your hosting provider"));
+            return Redirect::to($back)->with('error', __("File: :file_name is not write-able. Please contact your hosting provider"));
         }
         $query = Translation::select([
             'core_translations.*',
@@ -215,7 +216,7 @@ class TranslationsController extends AdminController
         fwrite($myfile, json_encode($json));
         fclose($myfile);
 
-        return redirect($back)->with('success', __("Generate Default JSON Language"));
+        return Redirect::to($back)->with('success', __("Generate Default JSON Language"));
     }
 
     public function findTranslations($path = null)
@@ -232,7 +233,8 @@ class TranslationsController extends AdminController
             '@lang',
             '@choice',
             'transEditable',
-            '__'
+            '__',
+            't' // Added t() for frontend
         );
         $pattern =                              // See http://regexr.com/392hu
             "[^\w]" .                          // Must not have an alphanum or _ or > before real method
@@ -245,79 +247,140 @@ class TranslationsController extends AdminController
             ")" .                                // Close group
             "[\'\"]" .                           // Closing quote
             "[\),]";                            // Close parentheses or new parameter
-        // Find all PHP + Twig files in the app folder, except for storage
+
+        // 1. Scan Backend (PHP)
         $finder = new Finder();
         $finder->in($path)->exclude('storage')
             ->exclude('node_modules')
             ->exclude('public')
             ->exclude('test')
             ->name('*.php')->files();
-        /** @var \Symfony\Component\Finder\SplFileInfo $file */
+
         foreach ($finder as $file) {
-            // Search the current file for the pattern
             if (preg_match_all("/$pattern/siU", $file->getContents(), $matches)) {
-                // Get all matches
                 foreach ($matches[2] as $key) {
                     if(!$key) continue;
                     $keys[] = $key;
                 }
             }
         }
-        // Remove duplicates
-        $keys = array_unique($keys);
+
+        // 2. Scan Frontend (TSX/TS) - sibling directory
+        $frontendPath = base_path('../explore-heros-travel-website');
+        if (is_dir($frontendPath)) {
+            $frontendFinder = new Finder();
+            $frontendFinder->in($frontendPath)
+                ->exclude('node_modules')
+                ->exclude('.next')
+                ->exclude('public')
+                ->name(['*.tsx', '*.ts', '*.js', '*.jsx'])
+                ->files();
+
+            foreach ($frontendFinder as $file) {
+                // Modified regex to capture both key and optional default text: t('key', 'default')
+                if (preg_match_all("/\bt\(\s*['\"]([^'\"]+)['\"]\s*(?:,\s*['\"]([^'\"]+)['\"])?/siU", $file->getContents(), $matches)) {
+                    foreach ($matches[1] as $index => $key) {
+                        if (!$key) continue;
+                        $defaultText = !empty($matches[2][$index]) ? $matches[2][$index] : $key;
+                        $keys[$key] = $defaultText;
+                    }
+                }
+            }
+        }
+
         // Add the translations to the database, if not existing.
+        $all_string = Translation::select("string", "id")->where("locale", "raw")->get()->pluck('id', 'string')->toArray();
 
-        $all_string = Translation::select("string")->where("locale","raw")->get()->pluck('string')->toArray();
-        $all_string = array_flip($all_string);
-
-        foreach ($keys as $key) {
-            // Split the group and item
+        foreach ($keys as $key => $defaultText) {
             if(empty($all_string[ $key ])){
-                $lang =  new Translation([
+                $raw = new Translation([
                     'locale' => 'raw',
                     'string' => $key
                 ]);
-                $lang->save();
+                $raw->save();
+                $parentId = $raw->id;
+            } else {
+                $parentId = $all_string[$key];
+            }
+
+            // Auto-fill English (en) if it doesn't exist
+            $checkEn = Translation::where('locale', 'en')->where('parent_id', $parentId)->first();
+            if (!$checkEn) {
+                $en = new Translation([
+                    'locale' => 'en',
+                    'string' => $defaultText,
+                    'parent_id' => $parentId
+                ]);
+                $en->save();
             }
         }
+
         // Return the number of found translations
         return count($keys);
     }
 
-    public function loadTranslateJson(Request $request){
+    public function loadTranslateJson(Request $request)
+    {
         $locale_name = $request->input('locale');
-        $file = base_path('resources/lang/'.$locale_name.'.json');
-        $back = route('language.admin.translations.index');
-        if(!is_file($file)){
-            return redirect($back)->with('error', __("File language source does not exists"));
+        if (!$locale_name) {
+            return response()->json(['error' => 'Locale is required'], 400);
         }
+
+        $file = base_path('resources/lang/' . $locale_name . '.json');
+
+        // If not in backend lang, try frontend messages
+        if (!is_file($file)) {
+            $file = base_path('../explore-heros-travel-website/messages/' . $locale_name . '.json');
+        }
+
+        if (!is_file($file)) {
+            return response()->json(['error' => "Translation file ({$locale_name}.json) not found"], 404);
+        }
+
         $content = file_get_contents($file);
-        if(empty($content)){
-            return redirect($back)->with('error', __("File language source empty"));
-        }
-        $json = \GuzzleHttp\json_decode($content,true);
-        if(empty($json)){
-            return redirect($back)->with('error', __("File language source do not have any strings"));
+        $json = json_decode($content, true);
+        if (empty($json)) {
+            return response()->json(['error' => "Translation file is empty or invalid JSON"], 400);
         }
 
-        $all_string = Translation::select("*")->where("locale","raw")->get()->pluck('string',"id")->toArray();
-        $all_string = array_flip($all_string);
+        $all_raw = Translation::where("locale", "raw")->get()->pluck("id", "string")->toArray();
+        $imported = 0;
 
-        foreach ($json as $key=>$value){
-            if(!empty($all_string[ $key ])){
-                $lang_id = $all_string[ $key ];
-                $check_exits = Translation::where("locale",$locale_name)->where("parent_id",$lang_id)->first();
-                if(empty($check_exits)){
-                    $create = new Translation([
-                        'locale' => $locale_name,
-                        'string' => $value,
-                        "parent_id" => $lang_id
-                    ]);
-                    $create->save();
-                }
+        foreach ($json as $key => $value) {
+            // Ensure raw key exists
+            if (empty($all_raw[$key])) {
+                $raw = new Translation([
+                    'locale' => 'raw',
+                    'string' => $key
+                ]);
+                $raw->save();
+                $parentId = $raw->id;
+                $all_raw[$key] = $parentId;
+            } else {
+                $parentId = $all_raw[$key];
             }
+
+            // Update or create translation for locale
+            $check = Translation::where("locale", $locale_name)->where("parent_id", $parentId)->first();
+            if ($check) {
+                $check->string = $value;
+                $check->save();
+            } else {
+                $create = new Translation([
+                    'locale' => $locale_name,
+                    'string' => $value,
+                    "parent_id" => $parentId
+                ]);
+                $create->save();
+            }
+            $imported++;
         }
-        return redirect($back)->with('success', __("Load language from json success"));
+
+        return response()->json([
+            'success' => true,
+            'message' => "Imported {$imported} strings for {$locale_name}",
+            'count' => $imported
+        ]);
     }
 
     /**
@@ -490,7 +553,7 @@ class TranslationsController extends AdminController
         fwrite($myfile, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         fclose($myfile);
 
-        // Also write to public folder for frontend access
+        // Also write to public folder for frontend access (legacy/other uses)
         $publicDir = base_path('public/locales');
         if (!is_dir($publicDir)) {
             mkdir($publicDir, 0755, true);
@@ -499,6 +562,15 @@ class TranslationsController extends AdminController
         $publicFileHandle = fopen($publicFile, "w");
         fwrite($publicFileHandle, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         fclose($publicFileHandle);
+
+        // Also write to frontend messages folder (for next-intl)
+        $frontendMessagesDir = base_path('../explore-heros-travel-website/messages');
+        if (is_dir($frontendMessagesDir)) {
+            $frontendFile = $frontendMessagesDir . '/' . $lang->locale . '.json';
+            $frontendFileHandle = fopen($frontendFile, "w");
+            fwrite($frontendFileHandle, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            fclose($frontendFileHandle);
+        }
 
         // Update last build time
         $lang->last_build_at = date('Y-m-d H:i:s');

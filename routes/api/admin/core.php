@@ -7,6 +7,8 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Modules\Core\Models\Settings;
 use Modules\Core\Models\Menu;
 use Modules\Location\Models\Location;
@@ -153,7 +155,7 @@ Route::prefix('module/core/menu')->group(function () {
                 [
                     'key' => 'page',
                     'name' => 'Pages',
-                    'items' => \DB::table('core_pages')
+                    'items' => DB::table('core_pages')
                         ->where('status', 'publish')
                         ->select('id', 'title as name', 'slug')
                         ->get()
@@ -179,7 +181,7 @@ Route::prefix('module/core/menu')->group(function () {
                 [
                     'key' => 'news',
                     'name' => 'News/Blog',
-                    'items' => \DB::table('core_news')
+                    'items' => DB::table('core_news')
                         ->where('status', 'publish')
                         ->select('id', 'title as name', 'slug')
                         ->limit(50)
@@ -211,7 +213,7 @@ Route::prefix('module/core/menu')->group(function () {
             
             switch ($type) {
                 case 'page':
-                    $items = \DB::table('core_pages')
+                    $items = DB::table('core_pages')
                         ->where('status', 'publish')
                         ->where('title', 'LIKE', '%' . $query . '%')
                         ->select('id', 'title as name', 'slug')
@@ -253,7 +255,7 @@ Route::prefix('module/core/menu')->group(function () {
             
             switch ($type) {
                 case 'page':
-                    $query = \DB::table('core_pages')->where('status', 'publish');
+                    $query = DB::table('core_pages')->where('status', 'publish');
                     $total = $query->count();
                     $items = $query->select('id', 'title as name', 'slug')
                         ->skip(($page - 1) * $perPage)
@@ -352,15 +354,15 @@ Route::prefix('module/core/settings')->group(function () {
 // =====================================================
 Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () {
     // Global SEO Settings
-    Route::get('/global', function () {
-        try {
-            $settings = Settings::getSettings('seo');
-            return response()->json($settings);
-        } catch (\Exception $e) {
-            return response()->json([]);
-        }
-    });
-    
+    // Route::get('/global', function () {
+    //     try {
+    //         $settings = Settings::getSettings('seo');
+    //         return response()->json($settings);
+    //     } catch (\Exception $e) {
+    //         return response()->json([]);
+    //     }
+    // });
+
     Route::post('/global', function (Request $request) {
         try {
             $data = $request->all();
@@ -378,11 +380,11 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
     // 301 Redirects
     Route::get('/redirects', function (Request $request) {
         try {
-            if (!\Schema::hasTable('bc_redirects')) {
+            if (!Schema::hasTable('bc_redirects')) {
                 return response()->json(['data' => []]);
             }
-            
-            $query = \DB::table('bc_redirects');
+
+            $query = DB::table('bc_redirects');
             
             if ($request->has('search') && $request->search) {
                 $query->where(function ($q) use ($request) {
@@ -405,7 +407,7 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
     
     Route::get('/redirects/{id}', function ($id) {
         try {
-            $redirect = \DB::table('bc_redirects')->where('id', $id)->first();
+            $redirect = DB::table('bc_redirects')->where('id', $id)->first();
             return response()->json($redirect);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -414,8 +416,8 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
     
     Route::post('/redirects/store/{id?}', function (Request $request, $id = null) {
         try {
-            if (!\Schema::hasTable('bc_redirects')) {
-                \Schema::create('bc_redirects', function ($table) {
+            if (!Schema::hasTable('bc_redirects')) {
+                Schema::create('bc_redirects', function ($table) {
                     $table->id();
                     $table->string('old_url');
                     $table->string('new_url');
@@ -434,10 +436,10 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
             ];
             
             if ($id) {
-                \DB::table('bc_redirects')->where('id', $id)->update($data);
+                DB::table('bc_redirects')->where('id', $id)->update($data);
             } else {
                 $data['created_at'] = now();
-                $id = \DB::table('bc_redirects')->insertGetId($data);
+                $id = DB::table('bc_redirects')->insertGetId($data);
             }
             
             return response()->json(['success' => true, 'id' => $id]);
@@ -452,7 +454,7 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
             $action = $request->input('action');
             
             if ($action === 'delete') {
-                \DB::table('bc_redirects')->whereIn('id', $ids)->delete();
+                DB::table('bc_redirects')->whereIn('id', $ids)->delete();
             }
             
             return response()->json(['success' => true]);
@@ -460,17 +462,17 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Sitemap
-    Route::get('/sitemap', function () {
-        try {
-            $settings = Settings::getSettings('sitemap');
-            return response()->json($settings);
-        } catch (\Exception $e) {
-            return response()->json([]);
-        }
-    });
-    
+    // Route::get('/sitemap', function () {
+    //     try {
+    //         $settings = Settings::getSettings('sitemap');
+    //         return response()->json($settings);
+    //     } catch (\Exception $e) {
+    //         return response()->json([]);
+    //     }
+    // });
+
     Route::post('/sitemap', function (Request $request) {
         try {
             $data = $request->all();
@@ -505,15 +507,15 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
             foreach ($destinations as $dest) {
                 $sitemapContent .= "<url><loc>{$baseUrl}/destinations/{$dest->slug}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n";
             }
-            
+
             // Pages
-            $pages = \DB::table('core_pages')->where('status', 'publish')->get(['slug']);
+            $pages = DB::table('core_pages')->where('status', 'publish')->get(['slug']);
             foreach ($pages as $page) {
                 $sitemapContent .= "<url><loc>{$baseUrl}/{$page->slug}</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n";
             }
-            
+
             // Blog
-            $posts = \DB::table('core_news')->where('status', 'publish')->get(['slug']);
+            $posts = DB::table('core_news')->where('status', 'publish')->get(['slug']);
             foreach ($posts as $post) {
                 $sitemapContent .= "<url><loc>{$baseUrl}/blog/{$post->slug}</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>\n";
             }
@@ -528,18 +530,18 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Robots.txt
-    Route::get('/robots', function () {
-        try {
-            $robotsPath = public_path('robots.txt');
-            $content = file_exists($robotsPath) ? file_get_contents($robotsPath) : "User-agent: *\nAllow: /\n\nSitemap: " . config('app.url') . "/sitemap.xml";
-            return response()->json(['content' => $content]);
-        } catch (\Exception $e) {
-            return response()->json(['content' => '']);
-        }
-    });
-    
+    // Route::get('/robots', function () {
+    //     try {
+    //         $robotsPath = public_path('robots.txt');
+    //         $content = file_exists($robotsPath) ? file_get_contents($robotsPath) : "User-agent: *\nAllow: /\n\nSitemap: " . config('app.url') . "/sitemap.xml";
+    //         return response()->json(['content' => $content]);
+    //     } catch (\Exception $e) {
+    //         return response()->json(['content' => '']);
+    //     }
+    // });
+
     Route::post('/robots', function (Request $request) {
         try {
             $content = $request->input('content');
