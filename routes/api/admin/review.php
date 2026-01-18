@@ -15,7 +15,7 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
     // Get all reviews
     Route::get('/', function (Request $request) {
         try {
-            $query = Review::with(['author', 'service']);
+            $query = Review::with(['author']);
             
             // Search filter
             if ($request->has('s') && $request->s) {
@@ -56,10 +56,10 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
     // Get single review
     Route::get('/edit/{id}', function ($id) {
         try {
-            $review = Review::with(['author', 'service'])->findOrFail($id);
-            
+            $review = Review::with(['author'])->findOrFail($id);
+
             // Get meta
-            $meta = \DB::table('bc_review_meta')->where('review_id', $review->id)->pluck('val', 'name')->toArray();
+            $meta = \Illuminate\Support\Facades\DB::table('bc_review_meta')->where('review_id', $review->id)->pluck('val', 'name')->toArray();
             
             return response()->json([
                 'data' => [
