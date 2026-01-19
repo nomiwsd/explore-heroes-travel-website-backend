@@ -18,7 +18,9 @@ class ReviewController extends AdminController
 
     public function index(Request $request)
     {
-        $this->checkPermission("review_manage_others");
+        if (!$this->hasPermission('review_manage_others') && !$this->hasPermission('review_manage')) {
+            abort(403);
+        }
         $model = Review::query();
         $model->orderBy('id', 'desc');
         if (!empty($author = $request->input('customer_id'))) {
@@ -32,10 +34,10 @@ class ReviewController extends AdminController
             $model->whereRaw(" ( title LIKE ? OR author_ip LIKE ? OR content LIKE ? ) ",[$search_name,$search_name,$search_name]);
             $model->orderBy('title', 'asc');
         }
-        if (!empty($status = $request->input('status'))) {
+        if (!empty($status = $request->input('status')) && $status !== 'all') {
             $model->where('status', $status);
         }
-        if (!empty($service_type = $request->input('service'))) {
+        if (!empty($service_type = $request->input('service')) && $service_type !== 'all') {
             $model->where('object_model', $service_type);
         }
         if (!empty($service_id = $request->input('service_id'))) {
@@ -50,7 +52,118 @@ class ReviewController extends AdminController
         // Return JSON for API requests
         if ($request->wantsJson() || $request->expectsJson()) {
             $reviews = $model->with(['author'])->paginate(20);
-            return response()->json($reviews);
+
+            // Manually construct response to avoid IDE errors with toArray()
+            $response = [
+                'current_page' => $reviews->currentPage(),
+                'data' => $reviews->items(),
+                'first_page_url' => $reviews->url(1),
+                'from' => $reviews->firstItem(),
+                'last_page' => $reviews->lastPage(),
+                'last_page_url' => $reviews->url($reviews->lastPage()),
+                'next_page_url' => $reviews->nextPageUrl(),
+                'path' => $reviews->path(),
+                'per_page' => $reviews->perPage(),
+                'prev_page_url' => $reviews->previousPageUrl(),
+                'to' => $reviews->lastItem(),
+                'total' => $reviews->total(),
+            ];
+
+            // Transform data manually
+            $response['data'] = collect($reviews->items())->map(function ($review) {
+                // Get Tour Name and Slug
+                $tourName = null;
+                $tourData = null;
+                if ($review->object_model === 'tour' && $review->object_id) {
+                    $tour = \Modules\Tour\Models\Tour::find($review->object_id);
+                    if ($tour) {
+                        $tourName = $tour->title;
+                        $tourData = [
+                            'id' => $tour->id,
+                            'title' => $tour->title,
+                            'slug' => $tour->slug,
+                        ];
+                    }
+                }
+
+                // Get Review Meta
+                $meta = ReviewMeta::where('review_id', $review->id)->get();
+                $metaData = [];
+                $imageIds = [];
+                foreach ($meta as $m) {
+                    if ($m->name === 'review_image') {
+                        $imageIds[] = (int) $m->val;
+                    } else {
+                        // Handle boolean fields
+                        if (in_array($m->name, ['show_on_homepage', 'show_on_tour_page', 'is_featured'])) {
+                            $metaData[$m->name] = ($m->val === '1' || $m->val === 'true');
+                        } else {
+                            $metaData[$m->name] = $m->val;
+                        }
+                    }
+                }
+
+                // Get Images
+                $imagesWithUrls = [];
+                if (!empty($imageIds)) {
+                    $mediaFiles = MediaFile::whereIn('id', $imageIds)->get();
+                    foreach ($imageIds as $imgId) {
+                        $media = $mediaFiles->firstWhere('id', $imgId);
+                        if ($media) {
+                            $filePath = $media->file_path;
+                            if (!str_starts_with($filePath, 'uploads/')) {
+                                $filePath = 'uploads/' . $filePath;
+                            }
+                            $imagesWithUrls[] = [
+                                'id' => $media->id,
+                                'url' => $filePath,
+                                'file_path' => $media->file_path,
+                            ];
+                        }
+                    }
+                }
+
+                // Get Author Avatar from User or Meta
+                $authorAvatar = null;
+                if ($review->author && $review->author->avatar_id) {
+                    $authorAvatar = get_file_url($review->author->avatar_id, 'full');
+                } elseif (isset($metaData['author_avatar'])) {
+                    $authorAvatar = $metaData['author_avatar'];
+                }
+
+                // Convert model to array
+                $data = $review->toArray();
+
+                // Add/Override fields
+                $data['rating'] = $review->rate_number ?? 0;
+                $data['tour_name'] = $tourName; // Keep for simple table display
+                $data['tour_id'] = ($review->object_model === 'tour') ? $review->object_id : null;
+                $data['tour'] = $tourData;
+                $data['author_name'] = $review->author ? $review->author->name : ($metaData['author_name'] ?? ($review->author_name ?? 'Anonymous'));
+                $data['author_email'] = $review->author ? $review->author->email : ($metaData['author_email'] ?? ($review->email ?? ''));
+                $data['author_avatar'] = $authorAvatar;
+                $data['images'] = $imagesWithUrls;
+
+                // Merge all meta fields
+                $data = array_merge($data, $metaData);
+
+                // Ensure defaults
+                $defaults = [
+                    'author_location' => '',
+                    'author_country' => '',
+                    'review_source' => 'website',
+                    'review_date' => '',
+                    'show_on_homepage' => false,
+                    'is_featured' => false,
+                    'trip_summary' => '',
+                    'agent_name' => '',
+                    'agent_photo' => '',
+                ];
+
+                return array_merge($defaults, $data);
+            });
+
+            return response()->json($response);
         }
 
         $data = [
@@ -66,7 +179,9 @@ class ReviewController extends AdminController
 
     public function edit(Request $request, $id)
     {
-        $this->checkPermission("review_manage_others");
+        if (!$this->hasPermission('review_manage_others') && !$this->hasPermission('review_manage')) {
+            abort(403);
+        }
         $review = Review::with(['author'])->findOrFail($id);
         
         // Get review meta
@@ -200,7 +315,9 @@ class ReviewController extends AdminController
 
     public function store(Request $request, $id = null)
     {
-        $this->checkPermission("review_manage_others");
+        if (!$this->hasPermission('review_manage_others') && !$this->hasPermission('review_manage')) {
+            abort(403);
+        }
         
         $request->validate([
             'title' => 'required|string|max:255',
@@ -291,26 +408,28 @@ class ReviewController extends AdminController
                 'data' => $review
             ]);
         }
-        
-        return redirect()->route('review.admin.index')->with('success', $id ? 'Review updated!' : 'Review created!');
+
+        return \Illuminate\Support\Facades\Redirect::route('review.admin.index')->with('success', $id ? 'Review updated!' : 'Review created!');
     }
 
     public function bulkEdit(Request $request)
     {
-        $this->checkPermission("review_manage_others");
+        if (!$this->hasPermission('review_manage_others') && !$this->hasPermission('review_manage')) {
+            abort(403);
+        }
         $ids = $request->input('ids');
         $action = $request->input('action');
         if (empty($ids) or !is_array($ids)) {
             if ($request->wantsJson() || $request->expectsJson()) {
                 return response()->json(['success' => false, 'message' => 'No items selected!'], 400);
             }
-            return redirect()->back()->with('error', __('No items selected!'));
+            return \Illuminate\Support\Facades\Redirect::back()->with('error', __('No items selected!'));
         }
         if (empty($action)) {
             if ($request->wantsJson() || $request->expectsJson()) {
                 return response()->json(['success' => false, 'message' => 'Please select an action!'], 400);
             }
-            return redirect()->back()->with('error', __('Please select an action!'));
+            return \Illuminate\Support\Facades\Redirect::back()->with('error', __('Please select an action!'));
         }
         $allServices = get_bookable_services();
         if ($action == "delete") {
@@ -355,7 +474,7 @@ class ReviewController extends AdminController
         if ($request->wantsJson() || $request->expectsJson()) {
             return response()->json(['success' => true, 'message' => 'Update success!']);
         }
-        
-        return redirect()->back()->with('success', __('Update success!'));
+
+        return \Illuminate\Support\Facades\Redirect::back()->with('success', __('Update success!'));
     }
 }

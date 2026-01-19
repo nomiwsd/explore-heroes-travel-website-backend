@@ -758,9 +758,10 @@ Route::prefix('translations')->group(function () {
 // =====================================================
 Route::prefix('reviews')->group(function () {
     // Get approved/featured reviews for homepage
+    // Get approved/featured reviews for homepage/success stories
     Route::get('/', function (Request $request) {
         try {
-            $query = DB::table('bc_review')
+            $query = \Modules\Review\Models\Review::query()
                 ->where('status', 'approved');
             
             // Filter by featured
@@ -775,48 +776,91 @@ Route::prefix('reviews')->group(function () {
             if ($request->has('object_model') && $request->object_model) {
                 $query->where('object_model', $request->object_model);
             }
-            
+
+            // Eager load author
+            $query->with(['author']);
+
             $reviews = $query->orderBy('created_at', 'desc')
-                ->limit($request->per_page ?? 20)
-                ->get();
-            
+                ->paginate($request->input('per_page', 20));
+
             // Transform to match frontend expectations
-            $data = $reviews->map(function ($review) {
+            $data = $reviews->getCollection()->map(function ($review) {
+                // Get Meta
+                $meta = \Modules\Review\Models\ReviewMeta::where('review_id', $review->id)->pluck('val', 'name')->toArray();
+
+                // Fetch Images
+                $images = [];
+                $imageIds = [];
+                $reviewImagesMeta = \Modules\Review\Models\ReviewMeta::where('review_id', $review->id)->where('name', 'review_image')->get();
+                foreach ($reviewImagesMeta as $imgMeta) {
+                    $imageIds[] = $imgMeta->val;
+                }
+
+                if (!empty($imageIds)) {
+                    $mediaFiles = \Modules\Media\Models\MediaFile::whereIn('id', $imageIds)->get();
+                    foreach ($mediaFiles as $media) {
+                        $images[] = get_file_url($media->id, 'full');
+                    }
+                }
+
+                // Fallback image if no review images
+                $mainImage = !empty($images) ? $images[0] : null;
+
+                // Get Associated Object (Tour) details
+                $tourName = null;
+                $tourLink = null;
+                $tourImage = null;
+
+                if ($review->object_model === 'tour' && $review->object_id) {
+                    $tour = \Modules\Tour\Models\Tour::find($review->object_id);
+                    if ($tour) {
+                        $tourName = $tour->title;
+                        $tourLink = $tour->slug;
+                        if (!$mainImage && $tour->image_id) {
+                            $tourImage = get_file_url($tour->image_id, 'full');
+                        }
+                    }
+                }
+
                 return [
                     'id' => $review->id,
                     'object_id' => $review->object_id,
                     'object_model' => $review->object_model ?? 'tour',
                     'tour_id' => $review->object_id,
-                    'tour_name' => $review->tour_name ?? null,
+                    'tour_name' => $tourName,
+                    'tour_slug' => $tourLink,
                     'author_id' => $review->author_id,
-                    'author_name' => $review->author_name ?? 'Anonymous',
-                    'author_email' => $review->author_email ?? null,
-                    'author_avatar' => $review->author_avatar ?? null,
-                    'author_location' => $review->author_location ?? null,
-                    'author_country' => $review->author_country ?? null,
+                    'author_name' => $meta['author_name'] ?? ($review->author ? $review->author->name : 'Anonymous'),
+                    'author_email' => $meta['author_email'] ?? ($review->author ? $review->author->email : null),
+                    'author_avatar' => $meta['author_avatar'] ?? ($review->author ? get_file_url($review->author->avatar_id, 'full') : null),
+                    'author_location' => $meta['author_location'] ?? null,
+                    'author_country' => $meta['author_country'] ?? null,
                     'rating' => $review->rate_number ?? $review->rating ?? 5,
                     'title' => $review->title ?? '',
                     'content' => $review->content ?? '',
+                    'full_review' => $review->content ?? '',
                     'status' => $review->status,
-                    'show_on_homepage' => $review->show_on_homepage ?? 0,
-                    'show_on_tour_page' => $review->show_on_tour_page ?? 0,
-                    'is_featured' => $review->is_featured ?? 0,
-                    'review_date' => $review->review_date ?? $review->created_at,
-                    'review_source' => $review->review_source ?? 'website',
-                    'trip_summary' => $review->trip_summary ?? null,
                     'created_at' => $review->created_at,
+                    'date' => $meta['review_date'] ?? $review->created_at->format('Y-m-d'),
+                    'images' => $images,
+                    'image' => $mainImage ?? $tourImage, // Use review image, fallback to tour image
+                    'all_images' => $images,
+                    'review_source' => $meta['review_source'] ?? 'website',
                 ];
             });
-            
+
             return response()->json([
                 'data' => $data,
-                'total' => $reviews->count(),
+                'current_page' => $reviews->currentPage(),
+                'last_page' => $reviews->lastPage(),
+                'total' => $reviews->total(),
             ]);
         } catch (\Exception $e) {
-            return response()->json(['data' => [], 'total' => 0, 'error' => $e->getMessage()]);
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
+
     // Get reviews for a specific tour/object (public)
     Route::get('/{objectModel}/{objectId}', function ($objectModel, $objectId) {
         try {

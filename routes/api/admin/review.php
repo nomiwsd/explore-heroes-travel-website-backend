@@ -93,16 +93,26 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
                 'title' => 'required',
                 'content' => 'required',
                 'rating' => 'required|numeric',
-                'object_id' => 'required',
+                'object_id' => 'required_without:tour_id',
+                'tour_id' => 'required_without:object_id',
             ]);
 
             if ($validator->fails()) {
                 return response()->json(['error' => $validator->errors()->first()], 400);
             }
 
+            // Map tour_id to object_id if present
+            $objectId = $request->input('object_id');
+            $objectModel = $request->input('object_model', 'tour');
+
+            if ($request->has('tour_id') && $request->input('tour_id')) {
+                $objectId = $request->input('tour_id');
+                $objectModel = 'tour';
+            }
+
             $review = new Review([
-                'object_id' => $request->input('object_id'),
-                'object_model' => $request->input('object_model', 'tour'),
+                'object_id' => $objectId,
+                'object_model' => $objectModel,
                 'title' => $request->input('title'),
                 'content' => $request->input('content'),
                 'rate_number' => $request->input('rating'),
