@@ -439,6 +439,7 @@ Route::prefix('tours')->group(function () {
                         'price' => $tour->price,
                         'sale_price' => $tour->sale_price,
                         'duration' => $tour->duration,
+                        'duration_type' => $tour->duration_type,
                         'nights' => $tour->nights, // Updated to use nights column
                         'duration_nights' => $tour->nights, // Legacy support
                         'image_url' => $tour->image_id ? get_file_url($tour->image_id, 'full') : null,
@@ -601,7 +602,10 @@ Route::prefix('tours')->group(function () {
                     'price' => $tour->price,
                     'sale_price' => $tour->sale_price,
                     'duration' => $tour->duration,
+                    'duration_type' => $tour->duration_type,
+
                     'nights' => $tour->nights, // Frontend uses nights or duration (frontend interface has duration_nights but mapped to nights)
+                    'duration_nights' => $tour->nights, // Added as per user request
                     // duration_nights removed (redundant)
                     'group_size' => $tour->max_people,
                     'min_people' => $tour->min_people,
@@ -680,6 +684,7 @@ Route::prefix('tours')->group(function () {
                             'price' => $t->price,
                             'sale_price' => $t->sale_price,
                             'duration' => $t->duration,
+                            'duration_type' => $t->duration_type,
                             'nights' => $t->nights,
                             'tour_type' => $t->tour_type,
                             'image_url' => $t->image_id ? get_file_url($t->image_id, 'full') : null,

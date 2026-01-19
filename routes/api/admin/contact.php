@@ -161,13 +161,14 @@ Route::prefix('module/contact')->middleware('auth:sanctum')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Bulk edit
     Route::post('/bulkEdit', function (Request $request) {
         try {
             $ids = $request->input('ids', []);
             $action = $request->input('action');
-            
+            $status = $request->input('status'); // Get status for update_status action
+
             if (empty($ids)) {
                 return response()->json(['error' => 'No items selected'], 400);
             }
@@ -185,13 +186,23 @@ Route::prefix('module/contact')->middleware('auth:sanctum')->group(function () {
                 case 'archived':
                     Contact::whereIn('id', $ids)->update(['status' => 'archived']);
                     break;
+                case 'update_status':
+                    if ($status) {
+                        Contact::whereIn('id', $ids)->update(['status' => $status]);
+                    }
+                    break;
                 default:
-                    return response()->json(['error' => 'Invalid action'], 400);
+                    // Allow direct status updates if action matches a status (legacy support)
+                    if (in_array($action, ['new', 'read', 'contacted', 'quoted', 'confirmed', 'closed', 'archived'])) {
+                        Contact::whereIn('id', $ids)->update(['status' => $action]);
+                    } else {
+                        return response()->json(['error' => 'Invalid action'], 400);
+                    }
             }
             
             return response()->json([
                 'success' => true,
-                'message' => ucfirst($action) . ' completed successfully',
+                'message' => 'Bulk action completed successfully',
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -217,11 +228,11 @@ Route::prefix('module/contact')->middleware('auth:sanctum')->group(function () {
             return response()->json([]);
         }
     });
-    
+
     // Export contacts
     Route::get('/export', function (Request $request) {
         try {
-            $query = Contact::query();
+            $query = Contact::with('tour:id,title');
             
             if ($request->has('status') && $request->status !== 'all') {
                 $query->where('status', $request->status);
@@ -233,12 +244,61 @@ Route::prefix('module/contact')->middleware('auth:sanctum')->group(function () {
             if ($request->has('date_to') && $request->date_to) {
                 $query->whereDate('created_at', '<=', $request->date_to);
             }
-            
-            $contacts = $query->orderBy('id', 'desc')->get(['id', 'name', 'email', 'phone', 'subject', 'message', 'status', 'created_at']);
-            
-            return response()->json([
-                'data' => $contacts,
-            ]);
+
+            $contacts = $query->orderBy('id', 'desc')->get();
+
+            $filename = 'contact_submissions_' . date('Y-m-d') . '.csv';
+            $headers = [
+                'Content-Type' => 'text/csv',
+                'Content-Disposition' => "attachment; filename=\"$filename\"",
+                'Pragma' => 'no-cache',
+                'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires' => '0',
+            ];
+
+            $callback = function () use ($contacts) {
+                $file = fopen('php://output', 'w');
+
+                // Add BOM for Excel compatibility
+                fputs($file, "\xEF\xBB\xBF");
+
+                // Headers
+                fputcsv($file, [
+                    'ID',
+                    'Name',
+                    'Email',
+                    'Phone',
+                    'Form Type',
+                    'Subject',
+                    'Message',
+                    'Destination',
+                    'Tour',
+                    'Status',
+                    'Notes',
+                    'Date'
+                ]);
+
+                foreach ($contacts as $contact) {
+                    fputcsv($file, [
+                        $contact->id,
+                        $contact->name,
+                        $contact->email,
+                        $contact->phone ? "\t" . $contact->phone : '', // Prepend tab to force text format in Excel
+                        $contact->form_type ?? 'contact',
+                        $contact->subject ?? '',
+                        $contact->message,
+                        $contact->destination_name ?? '',
+                        $contact->tour ? $contact->tour->title : '',
+                        $contact->status ?? 'new',
+                        $contact->notes ?? '',
+                        $contact->created_at->format('Y-m-d H:i:s'),
+                    ]);
+                }
+
+                fclose($file);
+            };
+
+            return response()->stream($callback, 200, $headers);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
