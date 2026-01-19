@@ -53,9 +53,9 @@ class Page extends BaseModel
     ];
     protected $slugField     = 'slug';
     protected $slugFromField = 'title';
-    protected $cleanFields = [
-        'content',
-    ];
+    // Removed 'content' from cleanFields to preserve TipTap inline styles (font-size, color, text-align)
+    protected $cleanFields = [];
+
 
     public $translatedAttributes = [
         'title',
