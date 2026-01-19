@@ -89,7 +89,9 @@ class MediaController extends Controller
         $s = $request->input('s');
         $model = MediaFile::query()->where('is_private', 0);
 
-        if (!Auth::user()->hasPermission("media_manage_others")) {
+        /** @var \App\User $user */
+        $user = Auth::user();
+        if (!$user->hasPermission("media_manage_others")) {
              $model->where('author_id', Auth::id());
         }
         $uploadConfigs = config('bc.media.groups');
@@ -117,7 +119,7 @@ class MediaController extends Controller
         if ($s) {
             $model->where('file_name', 'like', '%' . ($s) . '%');
         }
-        $files = $model->orderBy('id', 'desc')->paginate(32);
+        $files = $model->orderBy('id', 'desc')->paginate($request->input('per_page', 32));
         $res = [];
         foreach ($files as $file){
             $res[] = new MediaResource($file);
@@ -166,10 +168,12 @@ class MediaController extends Controller
         if(Auth::id()){
             return true;
         }
-        if (Auth::user()->hasPermission("media_upload")) {
+        /** @var \App\User $user */
+        $user = Auth::user();
+        if ($user->hasPermission("media_upload")) {
             return true;
         }
-        if (Auth::user()->hasPermission("media_manage_others")) {
+        if ($user->hasPermission("media_manage_others")) {
             return true;
         }
         return false;
@@ -192,7 +196,9 @@ class MediaController extends Controller
             return $this->sendError(__("You don't have permission delete the file!"));
         }
         $model = MediaFile::query()->whereIn("id",$file_ids);
-        if (!Auth::user()->hasPermission("media_manage_others")) {
+        /** @var \App\User $user */
+        $user = Auth::user();
+        if (!$user->hasPermission("media_manage_others")) {
             $model->where('author_id', Auth::id());
         }
         $files = $model->get();
@@ -225,7 +231,9 @@ class MediaController extends Controller
         ];
         $request->validate($validate);
 
-        if (!Auth::user()->hasPermission("media_upload")) {
+        /** @var \App\User $user */
+        $user = Auth::user();
+        if (!$user->hasPermission("media_upload")) {
             $result = [
                 'message' => __('403'),
                 'status'=>0
@@ -266,7 +274,9 @@ class MediaController extends Controller
         }
 
         // Check if user can edit this file
-        if (!Auth::user()->hasPermission("media_manage_others") && $file->author_id != Auth::id()) {
+        /** @var \App\User $user */
+        $user = Auth::user();
+        if (!$user->hasPermission("media_manage_others") && $file->author_id != Auth::id()) {
             return $this->sendError('You do not have permission to update this file');
         }
 
