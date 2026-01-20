@@ -532,21 +532,19 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
     });
 
     // Robots.txt
-    // Route::get('/robots', function () {
-    //     try {
-    //         $robotsPath = public_path('robots.txt');
-    //         $content = file_exists($robotsPath) ? file_get_contents($robotsPath) : "User-agent: *\nAllow: /\n\nSitemap: " . config('app.url') . "/sitemap.xml";
-    //         return response()->json(['content' => $content]);
-    //     } catch (\Exception $e) {
-    //         return response()->json(['content' => '']);
-    //     }
-    // });
+    Route::get('/robots', function () {
+        try {
+            $content = Settings::item('robots_txt_content', "User-agent: *\nAllow: /\n\nSitemap: " . config('app.url') . "/sitemap.xml");
+            return response()->json(['content' => $content]);
+        } catch (\Exception $e) {
+            return response()->json(['content' => '']);
+        }
+    });
 
     Route::post('/robots', function (Request $request) {
         try {
             $content = $request->input('content');
-            $robotsPath = public_path('robots.txt');
-            file_put_contents($robotsPath, $content);
+            Settings::store('robots_txt_content', $content, 'seo');
             return response()->json(['content' => $content, 'success' => true]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);

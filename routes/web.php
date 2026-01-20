@@ -101,3 +101,9 @@ Route::fallback(function () {
         'suggestion' => 'Visit / for available endpoints'
     ], 404);
 });
+
+// Dynamic robots.txt
+Route::get('/robots.txt', function () {
+    $content = \Modules\Core\Models\Settings::item('robots_txt_content', "User-agent: *\nAllow: /\n\nSitemap: " . config('app.url') . "/sitemap.xml");
+    return response($content)->header('Content-Type', 'text/plain');
+});
