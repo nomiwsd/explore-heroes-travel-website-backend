@@ -17,14 +17,24 @@ class Review extends BaseModel
         'object_model',
         'title',
         'content',
-        'rate_number',
-        'author_ip',
+        'rate_number', // Mapped to rating in API
         'status',
-        'vendor_id',
         'author_id',
         'is_featured',
         'show_on_homepage',
         'show_on_tour_page',
+        // Additional fields for extended review data
+        'author_name',
+        'author_email',
+        'author_avatar',
+        'author_location',
+        'author_country',
+        'review_source',
+        'review_date',
+        'trip_summary',
+        'agent_name',
+        'agent_role',
+        'agent_photo',
     ];
 
     public static function getDisplayTextScoreByLever($lever)
@@ -97,7 +107,7 @@ class Review extends BaseModel
             $count->where('object_model',$service_type);
         }
         if (!empty($user_id)) {
-            $count->where("create_user", $user_id);
+            $count->where("author_id", $user_id); // Changed from create_user to author_id
         }
         return $count->count("id");
     }
