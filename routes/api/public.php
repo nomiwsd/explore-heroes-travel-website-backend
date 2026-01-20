@@ -728,7 +728,7 @@ Route::prefix('translations')->group(function () {
             return response()->json($languages);
         } catch (\Exception $e) {
             return response()->json([
-                ['id' => 1, 'locale' => 'en', 'name' => 'English', 'flag' => '🇬🇧', 'is_default' => 1, 'status' => 'publish']
+                ['id' => 1, 'locale' => 'en', 'name' => 'English', 'flag' => 'gb', 'is_default' => 1, 'status' => 'publish']
             ]);
         }
     });
