@@ -36,16 +36,18 @@ class Settings extends BaseModel
         return (empty($value) and strlen($value)===0)?$default:$value;
     }
 
-    public static function store($key,$data){
-
+    public static function store($key, $data, $group = 'general')
+    {
         $check = Settings::where('name', $key)->first();
-        if($check){
-            $check->val = $data;
+        if ($check) {
+            $check->val = is_array($data) ? json_encode($data) : $data;
+            $check->group = $group;
             $check->save();
-        }else{
+        } else {
             $check = new self();
-            $check->val = $data;
+            $check->val = is_array($data) ? json_encode($data) : $data;
             $check->name = $key;
+            $check->group = $group;
             $check->save();
         }
 
