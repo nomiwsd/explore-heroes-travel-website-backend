@@ -829,23 +829,26 @@ Route::prefix('reviews')->group(function () {
                     'tour_id' => $review->object_id,
                     'tour_name' => $tourName,
                     'tour_slug' => $tourLink,
-                    'author_id' => $review->author_id,
-                    'author_name' => $meta['author_name'] ?? ($review->author ? $review->author->name : 'Anonymous'),
-                    'author_email' => $meta['author_email'] ?? ($review->author ? $review->author->email : null),
-                    'author_avatar' => $meta['author_avatar'] ?? ($review->author ? get_file_url($review->author->avatar_id, 'full') : null),
-                    'author_location' => $meta['author_location'] ?? null,
-                    'author_country' => $meta['author_country'] ?? null,
                     'rating' => $review->rate_number ?? $review->rating ?? 5,
                     'title' => $review->title ?? '',
                     'content' => $review->content ?? '',
                     'full_review' => $review->content ?? '',
                     'status' => $review->status,
                     'created_at' => $review->created_at,
-                    'date' => $meta['review_date'] ?? $review->created_at->format('Y-m-d'),
+
+                    // Prioritize Columns over Meta
+                    'author_id' => $review->author_id,
+                    'author_name' => $review->author_name ?? $meta['author_name'] ?? ($review->author ? $review->author->name : 'Anonymous'),
+                    'author_email' => $review->author_email ?? $meta['author_email'] ?? ($review->author ? $review->author->email : null),
+                    'author_avatar' => $review->author_avatar ?? $meta['author_avatar'] ?? ($review->author ? get_file_url($review->author->avatar_id, 'full') : null),
+                    'author_location' => $review->author_location ?? $meta['author_location'] ?? null,
+                    'author_country' => $review->author_country ?? $meta['author_country'] ?? null,
+                    'review_source' => $review->review_source ?? $meta['review_source'] ?? 'website',
+                    'date' => $review->review_date ?? $meta['review_date'] ?? $review->created_at->format('Y-m-d'),
+                    'trip_summary' => $review->trip_summary ?? null, // Added for completeness
+
                     'images' => $images,
-                    'image' => $mainImage ?? $tourImage, // Use review image, fallback to tour image
-                    'all_images' => $images,
-                    'review_source' => $meta['review_source'] ?? 'website',
+                    'image' => $mainImage ?? $tourImage
                 ];
             });
 
