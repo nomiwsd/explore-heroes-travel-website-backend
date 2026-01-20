@@ -60,7 +60,23 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
 
             // Get meta
             $meta = \Illuminate\Support\Facades\DB::table('bc_review_meta')->where('review_id', $review->id)->pluck('val', 'name')->toArray();
-            
+
+            // Get Images
+            $images = [];
+            $reviewImagesMeta = \Illuminate\Support\Facades\DB::table('bc_review_meta')
+                ->where('review_id', $review->id)
+                ->where('name', 'review_image')
+                ->get();
+
+            foreach ($reviewImagesMeta as $imgMeta) {
+                if ($imgMeta->val) {
+                    $images[] = [
+                        'id' => (int)$imgMeta->val,
+                        'url' => get_file_url((int)$imgMeta->val, 'full')
+                    ];
+                }
+            }
+
             return response()->json([
                 'data' => [
                     'id' => $review->id,
@@ -82,6 +98,13 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
                     'author_avatar' => $review->author_avatar ?? ($meta['author_avatar'] ?? null),
                     'author_location' => $review->author_location ?? ($meta['author_location'] ?? null),
                     'author_country' => $review->author_country ?? ($meta['author_country'] ?? null),
+
+                    'trip_summary' => $review->trip_summary,
+                    'agent_name' => $review->agent_name,
+                    'agent_role' => $review->agent_role,
+                    'agent_photo' => $review->agent_photo,
+                    'images' => $images,
+
                     'service' => $review->service,
                     'created_at' => $review->created_at,
                 ],
@@ -135,9 +158,20 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
                 'author_avatar' => $request->input('author_avatar'),
                 'author_location' => $request->input('author_location'),
                 'author_country' => $request->input('author_country'),
+                'trip_summary' => $request->input('trip_summary'),
+                'agent_name' => $request->input('agent_name'),
+                'agent_role' => $request->input('agent_role'),
+                'agent_photo' => $request->input('agent_photo'),
             ]);
 
             $review->save();
+
+            // Handle Images
+            if ($request->has('images') && is_array($request->input('images'))) {
+                foreach ($request->input('images') as $imageId) {
+                    $review->addMeta('review_image', $imageId);
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -169,8 +203,27 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
             $review->author_avatar = $request->input('author_avatar', $review->author_avatar);
             $review->author_location = $request->input('author_location', $review->author_location);
             $review->author_country = $request->input('author_country', $review->author_country);
+
+            $review->trip_summary = $request->input('trip_summary', $review->trip_summary);
+            $review->agent_name = $request->input('agent_name', $review->agent_name);
+            $review->agent_role = $request->input('agent_role', $review->agent_role);
+            $review->agent_photo = $request->input('agent_photo', $review->agent_photo);
             
             $review->save();
+
+            // Handle Images (Replace logic: Delete old, Add new)
+            if ($request->has('images') && is_array($request->input('images'))) {
+                // Delete existing
+                \Illuminate\Support\Facades\DB::table('bc_review_meta')
+                    ->where('review_id', $review->id)
+                    ->where('name', 'review_image')
+                    ->delete();
+
+                // Add new
+                foreach ($request->input('images') as $imageId) {
+                    $review->addMeta('review_image', $imageId);
+                }
+            }
 
             return response()->json([
                 'success' => true,
