@@ -917,20 +917,28 @@ Route::prefix('reviews')->group(function () {
                 'title' => $request->input('title'),
                 'content' => $request->input('content'),
                 'rate_number' => $request->input('rating'),
-                'author_ip' => $request->ip(),
                 'status' => 'pending',
                 'author_id' => auth('sanctum')->id() ?? null,
+
+                // Extended Fields (Direct Column Save)
+                'author_name' => $request->input('author_name'),
+                'author_email' => $request->input('author_email'),
+                'author_avatar' => $request->input('author_avatar'),
+                'author_location' => $request->input('author_location'),
+                'author_country' => $request->input('author_country'),
+                'review_source' => $request->input('review_source', 'website'),
+                'review_date' => $request->input('review_date', date('Y-m-d')),
             ]);
 
-            $review->save();
+            // Link to existing user if email matches
+            if (!$review->author_id && $review->author_email) {
+                $user = \App\User::where('email', $review->author_email)->first();
+                if ($user) {
+                    $review->author_id = $user->id;
+                }
+            }
 
-            if ($request->has('author_name')) $review->addMeta('author_name', $request->input('author_name'));
-            if ($request->has('author_email')) $review->addMeta('author_email', $request->input('author_email'));
-            if ($request->has('author_location')) $review->addMeta('author_location', $request->input('author_location'));
-            
-            // Always save review_source and review_date with defaults
-            $review->addMeta('review_source', $request->input('review_source', 'website'));
-            $review->addMeta('review_date', $request->input('review_date', date('Y-m-d')));
+            $review->save();
             
             // Handle dynamic meta array
             if ($request->has('meta') && is_array($request->input('meta'))) {

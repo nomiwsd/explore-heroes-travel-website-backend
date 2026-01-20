@@ -73,10 +73,15 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
                     'status' => $review->status,
                     'is_featured' => $review->is_featured,
                     'show_on_homepage' => $review->show_on_homepage,
+                    'show_on_tour_page' => $review->show_on_tour_page,
                     'author' => $review->author,
-                    'author_name' => $meta['author_name'] ?? ($review->author ? $review->author->name : 'Anonymous'),
-                    'author_email' => $meta['author_email'] ?? ($review->author ? $review->author->email : null),
-                    'review_source' => $meta['review_source'] ?? 'website',
+                    'author_name' => $review->author_name ?? ($meta['author_name'] ?? ($review->author ? $review->author->name : 'Anonymous')),
+                    'author_email' => $review->author_email ?? ($meta['author_email'] ?? ($review->author ? $review->author->email : null)),
+                    'review_source' => $review->review_source ?? ($meta['review_source'] ?? 'website'),
+                    'review_date' => $review->review_date ?? ($meta['review_date'] ?? $review->created_at),
+                    'author_avatar' => $review->author_avatar ?? ($meta['author_avatar'] ?? null),
+                    'author_location' => $review->author_location ?? ($meta['author_location'] ?? null),
+                    'author_country' => $review->author_country ?? ($meta['author_country'] ?? null),
                     'service' => $review->service,
                     'created_at' => $review->created_at,
                 ],
@@ -120,17 +125,19 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
                 'is_featured' => $request->input('is_featured', 0),
                 'show_on_homepage' => $request->input('show_on_homepage', 0),
                 'show_on_tour_page' => $request->input('show_on_tour_page', 1),
-                'vendor_id' => 1,
                 'author_id' => auth()->id() ?? 1,
-                'author_ip' => $request->ip(),
+
+                // Extended Columns
+                'author_name' => $request->input('author_name'),
+                'author_email' => $request->input('author_email'),
+                'review_source' => $request->input('review_source'),
+                'review_date' => $request->input('review_date'),
+                'author_avatar' => $request->input('author_avatar'),
+                'author_location' => $request->input('author_location'),
+                'author_country' => $request->input('author_country'),
             ]);
-            
+
             $review->save();
-            
-            // Meta
-            if ($request->has('author_name')) $review->addMeta('author_name', $request->input('author_name'));
-            if ($request->has('author_email')) $review->addMeta('author_email', $request->input('author_email'));
-            if ($request->has('review_source')) $review->addMeta('review_source', $request->input('review_source'));
 
             return response()->json([
                 'success' => true,
@@ -153,12 +160,18 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
             $review->status = $request->input('status', $review->status);
             $review->is_featured = $request->input('is_featured', $review->is_featured);
             $review->show_on_homepage = $request->input('show_on_homepage', $review->show_on_homepage);
+            $review->show_on_tour_page = $request->input('show_on_tour_page', $review->show_on_tour_page);
+
+            $review->author_name = $request->input('author_name', $review->author_name);
+            $review->author_email = $request->input('author_email', $review->author_email);
+            $review->review_source = $request->input('review_source', $review->review_source);
+            $review->review_date = $request->input('review_date', $review->review_date);
+            $review->author_avatar = $request->input('author_avatar', $review->author_avatar);
+            $review->author_location = $request->input('author_location', $review->author_location);
+            $review->author_country = $request->input('author_country', $review->author_country);
             
             $review->save();
-            
-            if ($request->has('author_name')) $review->addMeta('author_name', $request->input('author_name'));
-            if ($request->has('review_source')) $review->addMeta('review_source', $request->input('review_source'));
-            
+
             return response()->json([
                 'success' => true,
                 'data' => ['id' => $review->id],
