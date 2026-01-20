@@ -168,7 +168,7 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
 
             // Handle Images
             if ($request->has('images') && is_array($request->input('images'))) {
-                foreach ($request->input('images') as $imageId) {
+                foreach (array_unique($request->input('images')) as $imageId) {
                     $review->addMeta('review_image', $imageId, true);
                 }
             }
@@ -220,7 +220,7 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
                     ->delete();
 
                 // Add new
-                foreach ($request->input('images') as $imageId) {
+                foreach (array_unique($request->input('images')) as $imageId) {
                     $review->addMeta('review_image', $imageId, true);
                 }
             }
