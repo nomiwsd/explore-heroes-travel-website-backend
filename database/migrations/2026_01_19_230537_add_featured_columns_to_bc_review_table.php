@@ -12,10 +12,18 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('bc_review', function (Blueprint $table) {
-            $table->unsignedBigInteger('vendor_id')->nullable()->after('status');
-            $table->boolean('is_featured')->default(false)->after('vendor_id');
-            $table->boolean('show_on_homepage')->default(false)->after('is_featured');
-            $table->boolean('show_on_tour_page')->default(false)->after('show_on_homepage');
+            if (!Schema::hasColumn('bc_review', 'vendor_id')) {
+                $table->unsignedBigInteger('vendor_id')->nullable()->after('status');
+            }
+            if (!Schema::hasColumn('bc_review', 'is_featured')) {
+                $table->boolean('is_featured')->default(false)->after('status');
+            }
+            if (!Schema::hasColumn('bc_review', 'show_on_homepage')) {
+                $table->boolean('show_on_homepage')->default(false)->after('status');
+            }
+            if (!Schema::hasColumn('bc_review', 'show_on_tour_page')) {
+                $table->boolean('show_on_tour_page')->default(false)->after('status');
+            }
         });
     }
 
