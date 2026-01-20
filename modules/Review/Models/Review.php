@@ -38,6 +38,13 @@ class Review extends BaseModel
         'agent_photo',
     ];
 
+    protected $appends = ['rating'];
+
+    public function getRatingAttribute()
+    {
+        return $this->rate_number;
+    }
+
     public static function getDisplayTextScoreByLever($lever)
     {
         switch ($lever) {
