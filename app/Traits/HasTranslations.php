@@ -84,7 +84,9 @@ trait HasTranslations
             $find->origin_id = $this->getKey();
 
             // Cant use fill() here cuz it wont work with cast keys
-            foreach ($find->fillable as $key){
+            // Use getFillable() method instead of accessing protected $fillable property directly
+            $fillableKeys = $find->getFillable() ?? [];
+            foreach ($fillableKeys as $key) {
                 $find->setAttribute($key,$this->getAttribute($key));
             }
         }
