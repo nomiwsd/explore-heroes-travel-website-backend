@@ -12,6 +12,7 @@ class Review extends BaseModel
 {
     use SoftDeletes;
     protected $table = 'bc_review';
+    protected $trackUser = false;
     protected $fillable = [
         'object_id',
         'object_model',

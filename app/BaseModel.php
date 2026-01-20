@@ -39,6 +39,8 @@ class BaseModel extends Model
         return [];
     }
 
+    protected $trackUser = true;
+
     public function save(array $options = [])
     {
         // Clear Sitemap on Save
@@ -47,10 +49,12 @@ class BaseModel extends Model
             $sitemapHelper->clear($this->sitemap_type ? $this->sitemap_type : $this->type);
         }
 
-        if ($this->create_user) {
-            $this->update_user = Auth::id();
-        } else {
-            $this->create_user = Auth::id();
+        if ($this->trackUser) {
+            if ($this->create_user) {
+                $this->update_user = Auth::id();
+            } else {
+                $this->create_user = Auth::id();
+            }
         }
         if ($this->slugField && $this->slugFromField) {
             $slugField = $this->slugField;
@@ -242,7 +246,9 @@ class BaseModel extends Model
         if($this->status == "publish"){
             return true;
         }
-        if(Auth::id() and $this->author_id == Auth::id() and Auth::user()->hasPermission('dashboard_vendor_access')){
+        /** @var \App\User $user */
+        $user = Auth::user();
+        if ($user && $this->author_id == $user->id && method_exists($user, 'hasPermission') && $user->hasPermission('dashboard_vendor_access')) {
             return true;
         }
         return false;

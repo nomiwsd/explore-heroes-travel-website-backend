@@ -206,6 +206,14 @@ class ReviewController extends AdminController
         // Main table extended fields
         $review->author_name = $request->input('author_name');
         $review->author_email = $request->input('author_email');
+        // Link to existing user if email matches
+        if (!$review->author_id && $review->author_email) {
+            $user = \App\User::where('email', $review->author_email)->first();
+            if ($user) {
+                $review->author_id = $user->id;
+            }
+        }
+
         $review->author_avatar = $request->input('author_avatar');
         $review->author_location = $request->input('author_location');
         $review->author_country = $request->input('author_country');
@@ -237,6 +245,15 @@ class ReviewController extends AdminController
             ReviewMeta::where('review_id', $review->id)->where('name', 'review_image')->delete();
             foreach ($request->input('images') as $imageId) {
                 $review->addMeta('review_image', $imageId, true);
+            }
+        }
+
+        // Save generic meta
+        if ($request->has('meta') && is_array($request->input('meta'))) {
+            foreach ($request->input('meta') as $metaItem) {
+                if (isset($metaItem['name']) && isset($metaItem['val'])) {
+                    $review->addMeta($metaItem['name'], $metaItem['val'], false);
+                }
             }
         }
 
