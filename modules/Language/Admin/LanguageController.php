@@ -54,11 +54,13 @@ class LanguageController extends AdminController
             $totalStrings = \Modules\Language\Models\Translation::where('locale', 'raw')->count();
 
             $paginator->getCollection()->transform(function ($lang) use ($totalStrings) {
-                $translatedCount = \Modules\Language\Models\Translation::from('core_translations as t1')
+                $translatedCount = \Modules\Language\Models\Translation::withoutGlobalScopes()
+                    ->from('core_translations as t1')
                     ->join('core_translations as t2', 't1.parent_id', '=', 't2.id')
                     ->where('t1.locale', $lang->locale)
                     ->where('t2.locale', 'raw')
                     ->whereRaw("IFNULL(t1.string,'') != ''")
+                    ->whereNull('t1.deleted_at') // Manually check soft delete on t1
                     ->count();
 
                 $lang->translated_strings = $translatedCount;
