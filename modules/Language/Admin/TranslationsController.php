@@ -265,8 +265,11 @@ class TranslationsController extends AdminController
             }
         }
 
-        // 2. Scan Frontend (TSX/TS) - sibling directory
-        $frontendPath = base_path('../explore-heros-travel-website');
+        // 2. Scan Frontend (TSX/TS) - Configurable Path
+        // In local dev: sibling directory. In prod: might need to be set via env or skipped if not accessible
+        $frontendPathEnv = env('FRONTEND_PATH', '../explore-heros-travel-website');
+        $frontendPath = base_path($frontendPathEnv);
+
         if (is_dir($frontendPath)) {
             $frontendFinder = new Finder();
             $frontendFinder->in($frontendPath)
@@ -564,12 +567,16 @@ class TranslationsController extends AdminController
         fclose($publicFileHandle);
 
         // Also write to frontend messages folder (for next-intl)
-        $frontendMessagesDir = base_path('../explore-heros-travel-website/messages');
-        if (is_dir($frontendMessagesDir)) {
+        $frontendPathEnv = env('FRONTEND_PATH', '../explore-heros-travel-website');
+        $frontendMessagesDir = base_path($frontendPathEnv . '/messages');
+
+        if (is_dir($frontendMessagesDir) && is_writable($frontendMessagesDir)) {
             $frontendFile = $frontendMessagesDir . '/' . $lang->locale . '.json';
             $frontendFileHandle = fopen($frontendFile, "w");
-            fwrite($frontendFileHandle, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-            fclose($frontendFileHandle);
+            if ($frontendFileHandle) {
+                fwrite($frontendFileHandle, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                fclose($frontendFileHandle);
+            }
         }
 
         // Update last build time
