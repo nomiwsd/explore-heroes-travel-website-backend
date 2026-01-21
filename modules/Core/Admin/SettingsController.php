@@ -60,6 +60,7 @@ class SettingsController extends AdminController
                     'logo_url',
                     'favicon_id',
                     'favicon_url',
+                    'topbar_left_text',
                     'admin_email',
                     'from_email',
                     'from_name',
