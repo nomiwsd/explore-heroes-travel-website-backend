@@ -47,8 +47,66 @@ class SettingsController extends AdminController
 
         // Return JSON for API requests
         if ($request->wantsJson() || $request->expectsJson()) {
+            $allSettings = Settings::getSettings($group);
+
+            // Whitelist keys for General Settings to avoid sending huge payload
+            if ($group === 'general') {
+                $allowedKeys = [
+                    'site_title',
+                    'site_name',
+                    'site_desc',
+                    'site_tagline',
+                    'logo_id',
+                    'logo_url',
+                    'favicon_id',
+                    'favicon_url',
+                    'admin_email',
+                    'from_email',
+                    'from_name',
+                    'contact_email',
+                    'contact_phone',
+                    'address',
+                    'date_format',
+                    'site_timezone',
+                    'site_locale',
+                    'default_timezone',
+                    'footer_text_left',
+                    'footer_text_right',
+                    'enable_payment_apple_pay',
+                    'enable_payment_google_pay',
+                    'enable_payment_paypal',
+                    'enable_payment_cards',
+                    'enable_payment_alipay',
+                    'payment_custom_icon_url',
+                    'payment_icon_apple_pay',
+                    'payment_icon_google_pay',
+                    'payment_icon_paypal',
+                    'payment_icon_cards',
+                    'payment_icon_alipay',
+                ];
+
+                $filteredSettings = [];
+                foreach ($allowedKeys as $key) {
+                    if (isset($allSettings[$key])) {
+                        $filteredSettings[$key] = $allSettings[$key];
+                    }
+                }
+                // Merge with any keys explicitly defined in group config to be safe
+                if (!empty($group_data['keys'])) {
+                    foreach ($group_data['keys'] as $key) {
+                        if (isset($allSettings[$key])) {
+                            $filteredSettings[$key] = $allSettings[$key];
+                        }
+                    }
+                }
+
+                $settingsResponse = $filteredSettings;
+            } else {
+                $settingsResponse = $allSettings;
+            }
+
             return response()->json([
-                'settings' => Settings::getSettings($group),
+                'settings' => $settingsResponse,
                 'group' => $group_data
             ]);
         }
@@ -68,7 +126,7 @@ class SettingsController extends AdminController
     public function store(Request $request, $group)
     {
         if(is_demo_mode()){
-            return redirect()->back()->with('danger',__("DEMO MODE: Disable setting update"));
+            return back()->with('danger', __("DEMO MODE: Disable setting update"));
         }
         if(empty($this->groups)){
             $this->setGroups();
@@ -127,7 +185,16 @@ class SettingsController extends AdminController
             do_action(Hook::AFTER_SETTING_SAVED, $group_data);
             //Clear Cache for currency
             Session::put('bc_current_currency',"");
-            return redirect()->back()->with('success', __('Settings Saved'));
+
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json([
+                    'status' => 1,
+                    'message' => __('Settings Saved'),
+                    'settings' => Settings::getSettings($group)
+                ]);
+            }
+
+            return back()->with('success', __('Settings Saved'));
         }
     }
 
