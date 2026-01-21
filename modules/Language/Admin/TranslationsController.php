@@ -8,6 +8,7 @@ use Modules\AdminController;
 use Modules\Language\Models\Language;
 use Modules\Language\Models\Translation;
 use Symfony\Component\Finder\Finder;
+use Illuminate\Support\Facades\Log;
 
 class TranslationsController extends AdminController
 {
@@ -552,31 +553,56 @@ class TranslationsController extends AdminController
         }
 
         // Write to resources/lang folder (backend)
-        $myfile = fopen($file, "w");
-        fwrite($myfile, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-        fclose($myfile);
+        try {
+            $myfile = fopen($file, "w");
+            if ($myfile) {
+                fwrite($myfile, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                fclose($myfile);
+            }
+        } catch (\Exception $e) {
+            // Log error or ignore, but don't crash the request
+            Log::error("Failed to write to resources/lang: " . $e->getMessage());
+        }
 
         // Also write to public folder for frontend access (legacy/other uses)
-        $publicDir = base_path('public/locales');
-        if (!is_dir($publicDir)) {
-            mkdir($publicDir, 0755, true);
+        try {
+            $publicDir = base_path('public/locales');
+            if (!is_dir($publicDir)) {
+                @mkdir($publicDir, 0755, true);
+            }
+
+            if (is_dir($publicDir) && is_writable($publicDir)) {
+                $publicFile = $publicDir . '/' . $lang->locale . '.json';
+                // Check if file exists and is writable, or if doesn't exist and dir is writable
+                if ((!file_exists($publicFile) && is_writable($publicDir)) || (file_exists($publicFile) && is_writable($publicFile))) {
+                    $publicFileHandle = @fopen($publicFile, "w");
+                    if ($publicFileHandle) {
+                        fwrite($publicFileHandle, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                        fclose($publicFileHandle);
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to write to public/locales: " . $e->getMessage());
         }
-        $publicFile = $publicDir . '/' . $lang->locale . '.json';
-        $publicFileHandle = fopen($publicFile, "w");
-        fwrite($publicFileHandle, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-        fclose($publicFileHandle);
 
         // Also write to frontend messages folder (for next-intl)
-        $frontendPathEnv = env('FRONTEND_PATH', '../explore-heros-travel-website');
-        $frontendMessagesDir = base_path($frontendPathEnv . '/messages');
+        try {
+            $frontendPathEnv = env('FRONTEND_PATH', '../explore-heros-travel-website');
+            $frontendMessagesDir = base_path($frontendPathEnv . '/messages');
 
-        if (is_dir($frontendMessagesDir) && is_writable($frontendMessagesDir)) {
-            $frontendFile = $frontendMessagesDir . '/' . $lang->locale . '.json';
-            $frontendFileHandle = fopen($frontendFile, "w");
-            if ($frontendFileHandle) {
-                fwrite($frontendFileHandle, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-                fclose($frontendFileHandle);
+            if (is_dir($frontendMessagesDir) && is_writable($frontendMessagesDir)) {
+                $frontendFile = $frontendMessagesDir . '/' . $lang->locale . '.json';
+                if ((!file_exists($frontendFile) && is_writable($frontendMessagesDir)) || (file_exists($frontendFile) && is_writable($frontendFile))) {
+                    $frontendFileHandle = @fopen($frontendFile, "w");
+                    if ($frontendFileHandle) {
+                        fwrite($frontendFileHandle, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                        fclose($frontendFileHandle);
+                    }
+                }
             }
+        } catch (\Exception $e) {
+            Log::error("Failed to write to frontend messages: " . $e->getMessage());
         }
 
         // Update last build time
@@ -661,14 +687,63 @@ class TranslationsController extends AdminController
     /**
      * API: Scan for new translatable strings
      */
-    public function scanForStringsApi()
+    /**
+     * API: Scan for new translatable strings
+     * Accepts optional 'keys' array in request body to merge external keys (e.g. from frontend remote scan)
+     */
+    public function scanForStringsApi(Request $request)
     {
+        // 1. Local Scan (Backend files)
         $count = $this->findTranslations();
+        $importedExternal = 0;
+
+        // 2. Import External Keys (e.g. sent from Frontend via script)
+        if ($request->has('keys') && is_array($request->input('keys'))) {
+            $externalKeys = $request->input('keys');
+            // Add the translations to the database
+            $all_string = Translation::select("string", "id")->where("locale", "raw")->get()->pluck('id', 'string')->toArray();
+
+            foreach ($externalKeys as $key) {
+                if (!$key || is_numeric($key)) continue;
+
+                $defaultText = $key; // Or pass object {key, default}
+
+                // Handle object format {key: '...', default: '...'} if needed, currently assuming string array
+                if (is_array($key)) {
+                    $defaultText = $key['default'] ?? $key['key'];
+                    $key = $key['key'];
+                }
+
+                if (empty($all_string[$key])) {
+                    $raw = new Translation([
+                        'locale' => 'raw',
+                        'string' => $key
+                    ]);
+                    $raw->save();
+                    $parentId = $raw->id;
+                    $importedExternal++;
+                } else {
+                    $parentId = $all_string[$key];
+                }
+
+                // Auto-fill English (en) if it doesn't exist
+                $checkEn = Translation::where('locale', 'en')->where('parent_id', $parentId)->first();
+                if (!$checkEn) {
+                    $en = new Translation([
+                        'locale' => 'en',
+                        'string' => $defaultText,
+                        'parent_id' => $parentId
+                    ]);
+                    $en->save();
+                }
+            }
+        }
 
         return response()->json([
             'success' => true,
             'found' => $count,
-            'message' => "Found and added {$count} translatable strings"
+            'imported' => $importedExternal,
+            'message' => "Found {$count} local strings and imported {$importedExternal} remote strings"
         ]);
     }
 }
