@@ -45,4 +45,59 @@ Route::prefix('translations')->group(function () {
         // If no file exists, return empty object
         return response()->json([]);
     });
+
+    /**
+     * Remote Scan Endpoint (Publicly accessible to receive keys from frontend script)
+     */
+    Route::post('/scan', function (Request $request) {
+        // 1. Import External Keys (e.g. sent from Frontend via script)
+        $importedExternal = 0;
+
+        if ($request->has('keys') && is_array($request->input('keys'))) {
+            $externalKeys = $request->input('keys');
+
+            // Add the translations to the database
+            $all_string = \Modules\Language\Models\Translation::select("string", "id")->where("locale", "raw")->get()->pluck('id', 'string')->toArray();
+
+            foreach ($externalKeys as $key) {
+                if (!$key || is_numeric($key)) continue;
+
+                $defaultText = $key;
+                // Handle object format {key: '...', default: '...'} if needed
+                if (is_array($key)) {
+                    $defaultText = $key['default'] ?? $key['key'];
+                    $key = $key['key'];
+                }
+
+                if (empty($all_string[$key])) {
+                    $raw = new \Modules\Language\Models\Translation([
+                        'locale' => 'raw',
+                        'string' => $key
+                    ]);
+                    $raw->save();
+                    $parentId = $raw->id;
+                    $importedExternal++;
+                } else {
+                    $parentId = $all_string[$key];
+                }
+
+                // Auto-fill English (en) if it doesn't exist
+                $checkEn = \Modules\Language\Models\Translation::where('locale', 'en')->where('parent_id', $parentId)->first();
+                if (!$checkEn) {
+                    $en = new \Modules\Language\Models\Translation([
+                        'locale' => 'en',
+                        'string' => $defaultText,
+                        'parent_id' => $parentId
+                    ]);
+                    $en->save();
+                }
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'imported' => $importedExternal,
+            'message' => "Imported {$importedExternal} remote strings"
+        ]);
+    });
 });
