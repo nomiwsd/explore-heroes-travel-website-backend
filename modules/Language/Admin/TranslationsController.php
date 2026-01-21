@@ -628,15 +628,23 @@ class TranslationsController extends AdminController
             return response()->json(['error' => 'Language not found'], 404);
         }
 
+        // Count TOTAL based on 'raw' keys (The source of truth)
         $totalQuery = Translation::where('locale', 'raw')->count();
-        $translatedQuery = Translation::where('locale', $lang->locale)
-            ->whereRaw("IFNULL(string,'') != ''")
+
+        // Count TRANSLATED by checking if a translation exists for this locale for each raw key
+        // We join 'core_translations' (as t1) with 'core_translations' (as t2/raw)
+        // t1 is the target language, t2 is the raw key
+        $translatedQuery = Translation::from('core_translations as t1')
+            ->join('core_translations as t2', 't1.parent_id', '=', 't2.id')
+            ->where('t1.locale', $lang->locale)
+            ->where('t2.locale', 'raw')
+            ->whereRaw("IFNULL(t1.string,'') != ''")
             ->count();
 
         return response()->json([
             'total' => $totalQuery,
             'translated' => $translatedQuery,
-            'not_translated' => $totalQuery - $translatedQuery,
+            'not_translated' => max(0, $totalQuery - $translatedQuery), // Ensure non-negative
             'progress' => $totalQuery > 0 ? round(($translatedQuery / $totalQuery) * 100) : 0
         ]);
     }
