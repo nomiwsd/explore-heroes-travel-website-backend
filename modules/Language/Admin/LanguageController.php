@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Redirect;
 use Illuminate\Validation\Rule;
 use Modules\AdminController;
 use Modules\Language\Models\Language;
+use Modules\Language\Models\Translation;
 
 class LanguageController extends AdminController
 {
@@ -46,7 +47,27 @@ class LanguageController extends AdminController
 
         // Return JSON for API requests
         if ($request->wantsJson() || $request->expectsJson()) {
-            return response()->json($listLanguage->paginate(20));
+            /** @var \Illuminate\Pagination\LengthAwarePaginator $paginator */
+            $paginator = $listLanguage->paginate(20);
+
+            // Calculate total raw strings once
+            $totalStrings = \Modules\Language\Models\Translation::where('locale', 'raw')->count();
+
+            $paginator->getCollection()->transform(function ($lang) use ($totalStrings) {
+                $translatedCount = \Modules\Language\Models\Translation::from('core_translations as t1')
+                    ->join('core_translations as t2', 't1.parent_id', '=', 't2.id')
+                    ->where('t1.locale', $lang->locale)
+                    ->where('t2.locale', 'raw')
+                    ->whereRaw("IFNULL(t1.string,'') != ''")
+                    ->count();
+
+                $lang->translated_strings = $translatedCount;
+                $lang->total_strings = $totalStrings;
+                $lang->progress = $totalStrings > 0 ? round(($translatedCount / $totalStrings) * 100) : 0;
+                return $lang;
+            });
+
+            return response()->json($paginator);
         }
 
         $data = [
