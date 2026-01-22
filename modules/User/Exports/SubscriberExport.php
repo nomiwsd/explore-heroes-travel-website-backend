@@ -16,7 +16,9 @@ class SubscriberExport implements FromCollection, WithHeadings, WithMapping
         return Subscriber::select([
             'email',
             'first_name',
-            'last_name'
+            'last_name',
+            'created_at',
+            'source_page'
         ])->get();
     }
 
@@ -30,6 +32,8 @@ class SubscriberExport implements FromCollection, WithHeadings, WithMapping
             ltrim($subscriber->email,"=-"),
             ltrim($subscriber->first_name,"=-"),
             ltrim($subscriber->last_name,"=-"),
+            $subscriber->created_at ? display_datetime($subscriber->created_at) : '',
+            ltrim($subscriber->source_page, "=-"),
         ];
     }
 
@@ -39,6 +43,8 @@ class SubscriberExport implements FromCollection, WithHeadings, WithMapping
             'Email',
             'First name',
             'Last name',
+            'Date',
+            'Source Page'
         ];
     }
 }

@@ -33,6 +33,7 @@ return [
         'news_update',
         'news_delete',
         'news_manage_others',
+        'newsletter_manage',
     ],
     'menu' => [
         'menu_view',

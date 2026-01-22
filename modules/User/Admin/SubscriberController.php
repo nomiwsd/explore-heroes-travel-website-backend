@@ -50,7 +50,7 @@ class SubscriberController extends AdminController
         $this->checkPermission('newsletter_manage');
         $row = Subscriber::find($id);
         if (empty($row)) {
-            return redirect()->back();
+            return \Illuminate\Support\Facades\Redirect::back();
         }
         $data = [
             'row'         => $row,
@@ -87,12 +87,18 @@ class SubscriberController extends AdminController
         }
         $check = Subscriber::where('email', $request->input('email'))->first();
         if ($check and $check->id != $request->input('id')) {
-            return redirect()->back()->with('error', __('Email exists'));
+            return \Illuminate\Support\Facades\Redirect::back()->with('error', __('Email exists'));
         }
         $row->fill($request->input());
-        if ($row->save()) {
-            return redirect()->back()->with('success', __('Subscriber updated'));
+        // Handle source_page if present (e.g. from manual admin entry, though rare)
+        if ($request->has('source_page')) {
+            $row->source_page = $request->input('source_page');
         }
+
+        if ($row->save()) {
+            return \Illuminate\Support\Facades\Redirect::back()->with('success', __('Subscriber updated'));
+        }
+        return \Illuminate\Support\Facades\Redirect::back()->with('error', __('Error updating subscriber'));
     }
 
     public function bulkEdit(Request $request)
@@ -101,18 +107,18 @@ class SubscriberController extends AdminController
         $ids = $request->input('ids');
         $action = $request->input('action');
         if (empty($ids) or !is_array($ids)) {
-            return redirect()->back()->with('error', __('Select at least 1 item!'));
+            return \Illuminate\Support\Facades\Redirect::back()->with('error', __('Select at least 1 item!'));
         }
         if (empty($action)) {
-            return redirect()->back()->with('error', __('Select an Action!'));
+            return \Illuminate\Support\Facades\Redirect::back()->with('error', __('Select an Action!'));
         }
         switch ($action) {
             case "delete":
                 foreach ($ids as $id) {
                     $query = Subscriber::where("id", $id);
-                    $query->first();
-                    if(!empty($query)){
-                        $query->delete();
+                    $row = $query->first();
+                    if (!empty($row)) {
+                        $row->delete();
                     }
                 }
                 break;
@@ -123,11 +129,11 @@ class SubscriberController extends AdminController
                 }
                 break;
         }
-        return redirect()->back()->with('success', __('Updated successfully!'));
+        return \Illuminate\Support\Facades\Redirect::back()->with('success', __('Updated successfully!'));
     }
 
     public function export()
     {
-        return (new SubscriberExport())->download('subscribers-' . date('M-d-Y') . '.xlsx');
+        return (new SubscriberExport())->download('subscribers-' . date('M-d-Y') . '.csv', \Maatwebsite\Excel\Excel::CSV);
     }
 }

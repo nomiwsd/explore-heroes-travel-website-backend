@@ -62,13 +62,13 @@ class RoleController extends AdminController
         $this->checkPermission('role_manage');
         $row = Role::find((int)$id);
         if (empty($row)) {
-            return redirect(route('user.admin.role.index'));
+            return \Illuminate\Support\Facades\Redirect::to(route('user.admin.role.index'));
         }
         if (!empty($request->input())) {
             $row->fill($request->input());
             if ($row->save()) {
 
-                return redirect(route('user.admin.role.index'))->with('success', __('Role updated'));
+                return \Illuminate\Support\Facades\Redirect::to(route('user.admin.role.index'))->with('success', __('Role updated'));
             }
         }
         $data = [
@@ -92,7 +92,7 @@ class RoleController extends AdminController
 
     public function store(Request $request, $id){
         if(is_demo_mode()){
-            return back()->with('danger',  __('DEMO Mode: You can not do this') );
+            return \Illuminate\Support\Facades\Redirect::back()->with('danger',  __('DEMO Mode: You can not do this'));
         }
         $rules = [
             'name'=>'required',
@@ -105,7 +105,7 @@ class RoleController extends AdminController
         if($id>0){
             $row = Role::whereId($id)->first();
             if (empty($row)) {
-                return redirect(route('user.admin.role.index'));
+                return \Illuminate\Support\Facades\Redirect::to(route('user.admin.role.index'));
             }
             $rules['code'][] = Rule::unique(Role::getTableName(),'code')->ignore($row->id);
         }else{
@@ -118,9 +118,9 @@ class RoleController extends AdminController
         $res = $row->save();
         if ($res) {
             if($id > 0 ){
-                return back()->with('success',  __('Role updated') );
+                return \Illuminate\Support\Facades\Redirect::back()->with('success',  __('Role updated'));
             }else{
-                return redirect(route('user.admin.role.detail',['id' => $row->id]))->with('success', __('Role created') );
+                return \Illuminate\Support\Facades\Redirect::to(route('user.admin.role.detail', ['id' => $row->id]))->with('success', __('Role created'));
             }
         }
     }
@@ -161,7 +161,7 @@ class RoleController extends AdminController
         $all = setting_item_array('role_verify_fields');
         $row = $all[$id] ?? [];
 
-        if(empty($row)) return redirect()->back()->with("error",__("Field not found"));
+        if (empty($row)) return \Illuminate\Support\Facades\Redirect::back()->with("error", __("Field not found"));
 
         $row['id'] = $id;
 
@@ -193,7 +193,7 @@ class RoleController extends AdminController
 
     public function verifyFieldsStore(){
         if(is_demo_mode()){
-            return back()->with('danger',  __('DEMO Mode: You can not do this') );
+            return \Illuminate\Support\Facades\Redirect::back()->with('danger',  __('DEMO Mode: You can not do this'));
         }
 
         $this->checkPermission('role_manage');
@@ -203,7 +203,7 @@ class RoleController extends AdminController
         $id = Str::snake($id);
         if(empty($id))
         {
-            return redirect()->back()->withInput();
+            return \Illuminate\Support\Facades\Redirect::back()->withInput();
         }
         $isAdd = !isset($all[$id]);
         $all[$id] = [
@@ -226,26 +226,26 @@ class RoleController extends AdminController
 
         setting_update_item('role_verify_fields',$all);
 
-        return redirect()->back()->with('success', $isAdd? __("Field created") : __("Field saved"));
+        return \Illuminate\Support\Facades\Redirect::back()->with('success', $isAdd ? __("Field created") : __("Field saved"));
     }
 
-	public function bulkEdit(Request $request)
-	{
+    public function bulkEdit(Request $request)
+    {
         if(is_demo_mode()){
-            return back()->with('error',"Demo mode: disabled");
+            return \Illuminate\Support\Facades\Redirect::back()->with('error', "Demo mode: disabled");
         }
         $this->checkPermission('role_manage');
 
-		$ids = $request->input('ids');
-		$action = $request->input('action');
-		if (empty($ids))
-			return redirect()->back()->with('error', __('Select at leas 1 item!'));
-		if (empty($action))
-			return redirect()->back()->with('error', __('Select an Action!'));
-		if ($action == 'delete') {
-			$all = setting_item_array('role_verify_fields',[]);
-			$new = Arr::except($all,$ids);
-			setting_update_item('role_verify_fields',$new);
+        $ids = $request->input('ids');
+        $action = $request->input('action');
+        if (empty($ids))
+            return \Illuminate\Support\Facades\Redirect::back()->with('error', __('Select at leas 1 item!'));
+        if (empty($action))
+            return \Illuminate\Support\Facades\Redirect::back()->with('error', __('Select an Action!'));
+        if ($action == 'delete') {
+            $all = setting_item_array('role_verify_fields', []);
+            $new = Arr::except($all, $ids);
+            setting_update_item('role_verify_fields', $new);
             foreach ($ids as $id) {
                 $query = Role::where("id", $id);
                 $row = $query->first();
@@ -253,10 +253,10 @@ class RoleController extends AdminController
                     $row->delete();
                 }
             }
-            return redirect()->back()->with('success', __('Deleted success!'));
-		}
-		return redirect()->back()->with('success', __('Updated successfully!'));
-	}
+            return \Illuminate\Support\Facades\Redirect::back()->with('success', __('Deleted success!'));
+        }
+        return \Illuminate\Support\Facades\Redirect::back()->with('success', __('Updated successfully!'));
+    }
 
 
 	public function permission_matrix()
@@ -317,7 +317,7 @@ class RoleController extends AdminController
     public function save_permissions(Request $request)
     {
         if(is_demo_mode()){
-            return back()->with('danger',  __('DEMO Mode: You can not do this') );
+            return \Illuminate\Support\Facades\Redirect::back()->with('danger',  __('DEMO Mode: You can not do this'));
         }
         $this->checkPermission('role_manage');
 
@@ -334,7 +334,7 @@ class RoleController extends AdminController
             $permissions = $matrix[$role->id];
             $role->syncPermissions($permissions);
         }
-        return redirect()->back()->with('success', __('Permission Matrix updated'));
+        return \Illuminate\Support\Facades\Redirect::back()->with('success', __('Permission Matrix updated'));
     }
 
     public function getForSelect2(Request $request)
