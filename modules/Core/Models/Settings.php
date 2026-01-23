@@ -97,7 +97,12 @@ class Settings extends BaseModel
                     'enable_payment_paypal',
                     'enable_payment_cards',
                     'enable_payment_alipay',
-                    'payment_custom_icon_url'
+                    'enable_payment_alipay',
+                    'payment_custom_icon_url',
+                    'primary_color',
+                    'secondary_color',
+                    'header_logo',
+                    'footer_logo'
                 ]
             ],
         ];

@@ -83,7 +83,12 @@ class SettingsController extends AdminController
                     'payment_icon_google_pay',
                     'payment_icon_paypal',
                     'payment_icon_cards',
+                    'payment_icon_cards',
                     'payment_icon_alipay',
+                    'primary_color',
+                    'secondary_color',
+                    'header_logo',
+                    'footer_logo',
                 ];
 
                 $filteredSettings = [];
