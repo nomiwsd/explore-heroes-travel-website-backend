@@ -286,10 +286,10 @@ class User extends Authenticatable implements MustVerifyEmail
         return Review::query()->where('vendor_id', $this->id)->where('status', 'approved')->count('id');
     }
 
-    public function vendorRequest()
-    {
-        return $this->hasOne(VendorRequest::class);
-    }
+    //    public function vendorRequest()
+    //    {
+    //        return $this->hasOne(VendorRequest::class);
+    //    }
 
     public function getPayoutAccountsAttribute()
     {
@@ -315,9 +315,11 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function getTotalPaidAttribute()
     {
-        return VendorPayout::query()->where('status', '!=', 'rejected')->where([
-            'vendor_id' => $this->id
-        ])->sum('amount');
+        // TODO: VendorPayout class is missing. Returning 0 for now.
+        return 0;
+        // return VendorPayout::query()->where('status', '!=', 'rejected')->where([
+        //     'vendor_id' => $this->id
+        // ])->sum('amount');
     }
 
     public function getAvailablePayoutMethodsAttribute()

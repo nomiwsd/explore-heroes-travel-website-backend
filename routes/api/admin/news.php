@@ -51,13 +51,13 @@ Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
                     'category' => $post->category,
                     'author' => ($post->author && $post->author->id) ? [
                         'id' => $post->author->id,
-                        'display_name' => $post->author->getDisplayName() ?: $post->author->name ?: $post->author->email ?: 'Unknown',
+                        'display_name' => $post->author->name ?: 'Unknown',
                         'email' => $post->author->email,
                     ] : ($post->create_user ? (function() use ($post) {
                         $u = \App\User::find($post->create_user);
                         return $u ? [
                             'id' => $u->id,
-                            'display_name' => $u->getDisplayName() ?: $u->name ?: $u->email ?: 'Unknown',
+                            'display_name' => $u->name ?: 'Unknown',
                             'email' => $u->email,
                         ] : ['display_name' => 'Unknown'];
                     })() : ['display_name' => 'Unknown']),

@@ -1000,7 +1000,7 @@ Route::prefix('news')->group(function () {
                     if ($user) {
                         $author = [
                             'id' => $user->id,
-                            'display_name' => $user->display_name ?? $user->name ?? 'Unknown',
+                            'display_name' => $user->name ?? $user->display_name ?? 'Unknown',
                             'avatar_url' => null,
                         ];
                         if ($user->avatar_id) {
@@ -1073,7 +1073,7 @@ Route::prefix('news')->group(function () {
                     if ($user) {
                         $author = [
                             'id' => $user->id,
-                            'display_name' => $user->display_name ?? $user->name ?? 'Unknown',
+                            'display_name' => $user->name ?? $user->display_name ?? 'Unknown',
                             'avatar_url' => null,
                         ];
                         if ($user->avatar_id) {
