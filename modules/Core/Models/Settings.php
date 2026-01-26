@@ -4,6 +4,7 @@ namespace Modules\Core\Models;
 use App\BaseModel;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\Eloquent\Concerns\HasEvents;
+use Illuminate\Support\Facades\Log;
 use Modules\Language\Models\Language;
 
 class Settings extends BaseModel
@@ -28,10 +29,21 @@ class Settings extends BaseModel
 
     public static function item($item, $default = false)
     {
-        $value = Cache::rememberForever('setting_' . $item, function () use ($item ,$default) {
-            $val = Settings::where('name', $item)->first();
-            return $val?$val['val']:'';
-        });
+        $key = 'setting_' . $item;
+
+        if (Cache::has($key)) {
+            $value = Cache::get($key);
+        } else {
+            try {
+                $val = Settings::where('name', $item)->first();
+                $value = $val ? $val['val'] : '';
+                Cache::forever($key, $value);
+            } catch (\Exception $e) {
+                $value = $default;
+                // Log the error for debugging purposes
+                Log::warning("Settings::item connection failed for '{$item}': " . $e->getMessage());
+            }
+        }
 
         return (empty($value) and strlen($value)===0)?$default:$value;
     }
