@@ -4,6 +4,8 @@ namespace Modules\Language\Models;
 use App\BaseModel;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\App;
 
 class Language extends BaseModel
 {
@@ -27,22 +29,37 @@ class Language extends BaseModel
 
     public static function getActive($withCurrent = true)
     {
-        $value = Cache::rememberForever('locale_active_'.((int) $withCurrent ), function () use ($withCurrent) {
+        $key = 'locale_active_' . ((int) $withCurrent);
+        if (Cache::has($key)) {
+            return Cache::get($key);
+        }
+        try {
             $q = parent::query();
             if(!$withCurrent){
-                $q->where('locale','!=',\App::getLocale());
+                $q->where('locale', '!=', App::getLocale());
             }
-            return $q->where('status', 'publish')->orderByRaw('CASE WHEN (locale = \''.e(setting_item('site_locale')).'\') THEN 0 ELSE 1 END')->get();
-        });
-        return $value;
-
+            $value = $q->where('status', 'publish')->orderByRaw('CASE WHEN (locale = \'' . e(setting_item('site_locale')) . '\') THEN 0 ELSE 1 END')->get();
+            Cache::forever($key, $value);
+            return $value;
+        } catch (\Exception $e) {
+            Log::warning("Language::getActive connection failed: " . $e->getMessage());
+            return collect([]);
+        }
     }
 
     public static function findByLocale($locale){
-        $value = Cache::rememberForever('locale_' . $locale, function () use ($locale) {
-            return Language::where('locale', $locale)->first();
-        });
-        return $value;
+        $key = 'locale_' . $locale;
+        if (Cache::has($key)) {
+            return Cache::get($key);
+        }
+        try {
+            $value = Language::where('locale', $locale)->first();
+            Cache::forever($key, $value);
+            return $value;
+        } catch (\Exception $e) {
+            Log::warning("Language::findByLocale connection failed: " . $e->getMessage());
+            return null;
+        }
     }
 
     public function save(array $options = [])
