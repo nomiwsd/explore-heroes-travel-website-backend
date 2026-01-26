@@ -8,6 +8,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Api\DashboardController;
 
 // =====================================================
@@ -21,40 +22,53 @@ Route::prefix('admin')->group(function () {
             'password' => 'required',
         ]);
 
-        if (Auth::attempt($credentials)) {
-            $user = Auth::user();
-            $token = $user->createToken('admin-token')->plainTextToken;
+        try {
+            if (Auth::attempt($credentials)) {
+                /** @var \App\User $user */
+                $user = Auth::user();
+                $token = $user->createToken('admin-token')->plainTextToken;
 
-            // Audit Log Login
-            \Modules\Core\Models\AuditLog::create([
-                'user_id' => $user->id,
-                'event' => 'login',
-                'auditable_type' => 'User',
-                'auditable_id' => $user->id,
-                'ip_address' => $request->ip(),
-                'user_agent' => $request->userAgent()
-            ]);
+                // Audit Log Login
+                try {
+                    \Modules\Core\Models\AuditLog::create([
+                        'user_id' => $user->id,
+                        'event' => 'login',
+                        'auditable_type' => 'User',
+                        'auditable_id' => $user->id,
+                        'ip_address' => $request->ip(),
+                        'user_agent' => $request->userAgent()
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error("AuditLog creation failed: " . $e->getMessage());
+                }
 
-            $permissions = [];
-            if ($user->role_id == 1) {
-                // Super Admin gets all permissions
-                $permissions = \Modules\User\Helpers\PermissionHelper::all();
-            } else {
-                $permissions = $user->role ? $user->role->permissions->pluck('permission') : [];
+                $permissions = [];
+                if ($user->role_id == 1) {
+                    // Super Admin gets all permissions
+                    $permissions = \Modules\User\Helpers\PermissionHelper::all();
+                } else {
+                    $permissions = $user->role ? $user->role->permissions->pluck('permission') : [];
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'token' => $token,
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'avatar' => $user->avatar_url ?? null,
+                        'role' => $user->role_name,
+                        'permissions' => $permissions
+                    ],
+                ]);
             }
-
+        } catch (\Illuminate\Database\QueryException $e) {
+            Log::error("Login failed due to database error: " . $e->getMessage());
             return response()->json([
-                'success' => true,
-                'token' => $token,
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'avatar' => $user->avatar_url ?? null,
-                    'role' => $user->role_name,
-                    'permissions' => $permissions
-                ],
-            ]);
+                'success' => false,
+                'message' => 'Service Unavailable. Please try again later.',
+            ], 503);
         }
 
         return response()->json([
