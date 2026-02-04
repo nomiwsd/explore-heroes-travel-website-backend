@@ -63,8 +63,22 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
                 ->orderBy('name')
                 ->get();
             
+            // Transform themes to include image_url
+            $transformedThemes = $themes->map(function ($theme) {
+                return [
+                    'id' => $theme->id,
+                    'name' => $theme->name,
+                    'slug' => $theme->slug,
+                    'icon' => $theme->icon,
+                    'image_id' => $theme->image_id,
+                    'image_url' => $theme->image_id ? get_file_url($theme->image_id, 'full') : null,
+                    'attr_id' => $theme->attr_id,
+                    'created_at' => $theme->created_at,
+                ];
+            });
+            
             return response()->json([
-                'data' => $themes,
+                'data' => $transformedThemes,
                 'attr_id' => $attrId,
             ]);
         } catch (\Exception $e) {
