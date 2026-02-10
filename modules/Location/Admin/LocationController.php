@@ -291,8 +291,8 @@ class LocationController extends AdminController
                     $query->where("create_user", Auth::id());
                     $this->apiCheckPermission('location_delete');
                 }
-                $query->first();
-                if(!empty($query)){
+                $row = $query->first();
+                if(!empty($row)){
                     //Sync child location
                     $list_childs = $this->location::where("parent_id", $id)->get();
                     if(!empty($list_childs)){
@@ -302,7 +302,7 @@ class LocationController extends AdminController
                         }
                     }
                     //Del parent location
-                    $query->delete();
+                    $row->delete();
                 }
             }
         } else {
