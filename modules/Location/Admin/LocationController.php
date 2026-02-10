@@ -287,7 +287,10 @@ class LocationController extends AdminController
         if ($action == "delete") {
             foreach ($ids as $id) {
                 $query = $this->location::where("id", $id);
-                if (!$this->hasPermission('location_manage_others')) {
+                // For API requests (frontend admin), skip ownership check
+                // For web requests, check ownership if user can't manage others
+                $isApiRequest = $request->wantsJson() || $request->expectsJson();
+                if (!$isApiRequest && !$this->hasPermission('location_manage_others')) {
                     $query->where("create_user", Auth::id());
                     $this->apiCheckPermission('location_delete');
                 }
