@@ -22,7 +22,9 @@ class FolderController extends FrontendController
 
     public function index(Request $request){
         $folders = $this->mediaFolder::query();
-        if (!Auth::user()->hasPermission("media_manage_others")) {
+        // Skip ownership check for API requests (frontend admin dashboard)
+        $isApiRequest = $request->wantsJson() || $request->expectsJson();
+        if (!$isApiRequest && !Auth::user()->hasPermission("media_manage_others")) {
             $folders->ofMine();
         }
         if($s = $request->query('parent_id')){
@@ -39,7 +41,13 @@ class FolderController extends FrontendController
             $folder = new MediaFolder();
             $folder->user_id = auth()->id();
         }else{
-            $folder = MediaFolder::ofMine()->find($id);
+            // Skip ownership check for API requests (frontend admin dashboard)
+            $isApiRequest = $request->wantsJson() || $request->expectsJson();
+            if ($isApiRequest) {
+                $folder = MediaFolder::find($id);
+            } else {
+                $folder = MediaFolder::ofMine()->find($id);
+            }
             if(!$folder){
                 return $this->sendError(__("You are not allowed to edit this folder"));
             }
@@ -73,7 +81,9 @@ class FolderController extends FrontendController
 
         $id = $request->input('id');
         $folder = $this->mediaFolder::query();
-        if (!Auth::user()->hasPermission("media_manage_others")) {
+        // Skip ownership check for API requests (frontend admin dashboard)
+        $isApiRequest = $request->wantsJson() || $request->expectsJson();
+        if (!$isApiRequest && !Auth::user()->hasPermission("media_manage_others")) {
             $folder->ofMine();
         }
         $folder = $folder->find($id);
