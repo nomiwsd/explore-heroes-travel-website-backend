@@ -214,7 +214,11 @@ Route::prefix('module/location')->middleware('auth:sanctum')->group(function () 
             
             switch ($action) {
                 case 'delete':
-                    Location::whereIn('id', $ids)->delete();
+                    // Retrieve models first to ensure events and traits (SoftDeletes, NodeTrait) are triggered
+                    $locations = Location::whereIn('id', $ids)->get();
+                    foreach ($locations as $location) {
+                        $location->delete();
+                    }
                     break;
                 case 'publish':
                     Location::whereIn('id', $ids)->update(['status' => 'publish']);
