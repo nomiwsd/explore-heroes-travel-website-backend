@@ -1035,6 +1035,7 @@ Route::prefix('news')->group(function () {
                     'image_id' => $post->image_id,
                     'image_url' => $imageUrl,
                     'author' => $author,
+                    'publish_date' => $post->publish_date ? $post->publish_date->format('Y-m-d') : ($post->created_at ? $post->created_at->format('Y-m-d') : null),
                     'created_at' => $post->created_at,
                     'updated_at' => $post->updated_at,
                 ];
@@ -1107,6 +1108,7 @@ Route::prefix('news')->group(function () {
                     'image_id' => $post->image_id,
                     'image_url' => $imageUrl,
                     'author' => $author,
+                    'publish_date' => $post->publish_date ? $post->publish_date->format('Y-m-d') : ($post->created_at ? $post->created_at->format('Y-m-d') : null),
                     'created_at' => $post->created_at,
                 ];
             });
@@ -1235,8 +1237,8 @@ Route::prefix('news')->group(function () {
                     'slug' => $p->slug,
                     'excerpt' => $p->excerpt,
                     'image_url' => $getImageUrl($p->image_id),
+                    'publish_date' => $p->publish_date ? $p->publish_date->format('Y-m-d') : ($p->created_at ? $p->created_at->format('Y-m-d') : null),
                     'created_at' => $p->created_at,
-                    'publish_date' => $p->created_at ? $p->created_at->format('Y-m-d') : null,
                 ];
             });
             
@@ -1259,7 +1261,7 @@ Route::prefix('news')->group(function () {
                     'author' => $author,
                     'author_bio' => $post->author_bio,
                     'reading_time' => $post->reading_time ?? null,
-                    'publish_date' => $post->created_at ? $post->created_at->format('Y-m-d') : null,
+                    'publish_date' => $post->publish_date ? $post->publish_date->format('Y-m-d') : ($post->created_at ? $post->created_at->format('Y-m-d') : null),
                     'created_at' => $post->created_at,
                     // Duplicate key removal: 'created_at' => $post->created_at,
                     'og_title' => $post->og_title,
