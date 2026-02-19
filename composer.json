@@ -66,6 +66,10 @@
             "Modules\\": "modules/",
             "Pro\\": "pro/"
         },
+        "classmap": [
+            "modules/*/Migrations",
+            "modules/*/Database/Migrations"
+        ],
         "files": [
             "app/Helpers/AppHelper.php",
             "app/Helpers/ProHelper.php"

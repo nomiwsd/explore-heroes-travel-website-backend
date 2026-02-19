@@ -202,7 +202,7 @@ return [
         // \Themes\ThemeServiceProvider::class, // Removed - frontend only
         Modules\ServiceProvider::class,
         Intervention\Image\ImageServiceProvider::class, // Xử lý ảnh,
-        Barryvdh\Debugbar\ServiceProvider::class, // Debug BAR
+        // Barryvdh\Debugbar\ServiceProvider::class, // Debug BAR (disabled for --no-dev installs)
 
         App\Providers\RouteServiceProvider::class,
         Plugins\ServiceProvider::class,
