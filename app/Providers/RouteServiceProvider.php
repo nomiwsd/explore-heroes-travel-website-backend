@@ -52,8 +52,19 @@ class RouteServiceProvider extends ServiceProvider
      */
     protected function configureRateLimiting()
     {
+        // Public API - High limit for website visitors
         RateLimiter::for('api', function (Request $request) {
-            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+            return Limit::perMinute(5000)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // Admin API - Moderate limit for dashboard
+        RateLimiter::for('admin', function (Request $request) {
+            return Limit::perMinute(1000)->by($request->user()?->id ?: $request->ip());
+        });
+
+        // Auth API - Strict limit for security (login, register)
+        RateLimiter::for('auth', function (Request $request) {
+            return Limit::perMinute(10)->by($request->ip());
         });
     }
     /**
