@@ -687,7 +687,7 @@ Route::prefix('tours')->group(function () {
                             'duration_type' => $t->duration_type,
                             'nights' => $t->nights,
                             'tour_type' => $t->tour_type,
-                            'image_url' => $t->image_id ? get_file_url($t->image_id, 'full') : null,
+                            'image_url' => $t->image_id ? parse_url(get_file_url($t->image_id, 'full'), PHP_URL_PATH) : null,
                             'destination' => $t->location ? [
                                 'id' => $t->location->id,
                                 'name' => $t->location->name,
