@@ -36,18 +36,18 @@ Route::prefix('menus')->group(function () {
                       ->orWhere('locations', 'like', "%$location%");
                 })
                 ->first();
-            
+
             if (!$menu) {
                 // Log for debugging
                 Log::info("Menu not found for location: $location");
                 return response()->json(null);
             }
-            
+
             // Parse items from JSON string
             $items = $menu->items_json ?? [];
 
             Log::info("Menu found for location: $location, items count: " . count($items));
-            
+
             return response()->json([
                 'id' => $menu->id,
                 'name' => $menu->name,
@@ -59,7 +59,7 @@ Route::prefix('menus')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Get all published menus
     Route::get('/', function () {
         try {
@@ -76,7 +76,7 @@ Route::prefix('menus')->group(function () {
             return response()->json([]);
         }
     });
-    
+
     // Debug: Get all menus with raw data
     Route::get('/debug', function () {
         try {
@@ -105,17 +105,17 @@ Route::prefix('destinations')->group(function () {
     Route::get('/', function (Request $request) {
         try {
             $query = Location::where('status', 'publish');
-            
+
             // Filter by destination_type
             if ($request->has('type') && !empty($request->type)) {
                 $query->where('destination_type', $request->type);
             }
-            
+
             // Filter by is_featured
             if ($request->has('featured') && $request->featured == '1') {
                 $query->where('is_featured', 1);
             }
-            
+
             // Filter by show_on_homepage
             if ($request->has('homepage') && $request->homepage == '1') {
                 $query->where('show_on_homepage', 1);
@@ -123,7 +123,7 @@ Route::prefix('destinations')->group(function () {
 
             $lang = $request->query('lang');
             $destinations = $query->orderBy('display_order', 'asc')->orderBy('name', 'asc')->get();
-            
+
             return response()->json([
                 'data' => $destinations->map(function ($dest) use ($lang) {
                     $translation = $lang ? $dest->translate($lang) : null;
@@ -156,7 +156,7 @@ Route::prefix('destinations')->group(function () {
             $destination = Location::where('slug', $slug)
                 ->where('status', 'publish')
                 ->first();
-            
+
             if (!$destination) {
                 return response()->json(['error' => 'Destination not found'], 404);
             }
@@ -168,7 +168,7 @@ Route::prefix('destinations')->group(function () {
 
             // Get assigned tours via pivot table
             $assignedTourIds = \Modules\Tour\Models\TourLocation::where('location_id', $destination->id)->pluck('tour_id');
-            
+
             if ($assignedTourIds->count() > 0) {
                 $tours = Tour::whereIn('id', $assignedTourIds)
                     ->where('status', 'publish')
@@ -193,7 +193,7 @@ Route::prefix('destinations')->group(function () {
                     }
                 }
             }
-            
+
             return response()->json([
                 'data' => [
                     'id' => $destination->id,
@@ -252,7 +252,7 @@ Route::get('/tour-categories', function () {
             ->select('id', 'name', 'slug')
             ->orderBy('name')
             ->get();
-        
+
         return response()->json([
             'data' => $categories,
             'total' => $categories->count(),
@@ -269,7 +269,7 @@ Route::get('/tour-themes', function () {
             ->where('service', 'tour')
             ->where('slug', 'travel-styles')
             ->first();
-        
+
         if (!$travelStylesAttr) {
             return response()->json(['data' => [], 'total' => 0]);
         }
@@ -280,7 +280,7 @@ Route::get('/tour-themes', function () {
             ->select('id', 'name', 'slug', 'icon', 'image_id')
             ->orderBy('name')
             ->get();
-        
+
         return response()->json([
             'data' => $themes,
             'total' => $themes->count(),
@@ -297,7 +297,7 @@ Route::get('/tour-facilities', function () {
             ->where('service', 'tour')
             ->where('slug', 'facilities')
             ->first();
-        
+
         if (!$facilitiesAttr) {
             return response()->json(['data' => [], 'total' => 0]);
         }
@@ -308,7 +308,7 @@ Route::get('/tour-facilities', function () {
             ->select('id', 'name', 'slug', 'icon', 'image_id')
             ->orderBy('name')
             ->get();
-        
+
         return response()->json([
             'data' => $facilities,
             'total' => $facilities->count(),
@@ -327,13 +327,13 @@ Route::prefix('tours')->group(function () {
     Route::get('/', function (Request $request) {
         try {
             $query = Tour::where('status', 'publish');
-            
+
             // Filter by destination
             if ($request->has('destination_id') && $request->destination_id) {
                 $destIds = is_array($request->destination_id) ? $request->destination_id : explode(',', $request->destination_id);
                 $query->whereIn('location_id', $destIds);
             }
-            
+
             // Filter by category (Multi-category support)
             if ($request->has('category_id') && $request->category_id) {
                 $catIds = is_array($request->category_id) ? $request->category_id : explode(',', $request->category_id);
@@ -344,11 +344,11 @@ Route::prefix('tours')->group(function () {
                          // OR legacy handling or partial string match
                          $q->orWhereRaw("JSON_CONTAINS(category_ids, '$id')")
                            ->orWhere('category_ids', 'LIKE', "%\"$id\"%")
-                           ->orWhere('category_ids', 'LIKE', "%$id%"); 
+                           ->orWhere('category_ids', 'LIKE', "%$id%");
                      }
                  });
             }
-            
+
             // Filter by tour_type
             if ($request->has('tour_type') && $request->tour_type) {
                 if (is_array($request->tour_type)) {
@@ -392,24 +392,24 @@ Route::prefix('tours')->group(function () {
                      });
                 }
             }
-            
+
             // Filter by featured
             if ($request->has('featured') && $request->featured == '1') {
                 $query->where('is_featured', 1);
             }
-            
+
             // Search
             if ($request->has('s') && $request->s) {
                 $query->where('title', 'like', '%' . $request->s . '%');
             }
-            
+
             // Pagination
             $perPage = $request->get('per_page', 12);
             $lang = $request->query('lang');
             $tours = $query->orderBy('is_featured', 'desc')
                 ->orderBy('created_at', 'desc')
                 ->paginate($perPage);
-            
+
             return response()->json([
                 'data' => $tours->map(function ($tour) use ($lang) {
                     $translation = $lang ? $tour->translate($lang) : null;
@@ -457,7 +457,7 @@ Route::prefix('tours')->group(function () {
                         'categories' => $categories,
                         'tour_themes' => $themes,
                         // Legacy single category for compatibility (optional)
-                        'category' => $categories->first() ?? null, 
+                        'category' => $categories->first() ?? null,
                     ];
                 }),
                 'current_page' => $tours->currentPage(),
@@ -476,7 +476,7 @@ Route::prefix('tours')->group(function () {
             $tour = Tour::where('slug', $slug)
                 ->where('status', 'publish')
                 ->first();
-            
+
             if (!$tour) {
                 return response()->json(['error' => 'Tour not found'], 404);
             }
@@ -510,7 +510,7 @@ Route::prefix('tours')->group(function () {
             if ($faqsSrc) {
                 $faqs = is_string($faqsSrc) ? json_decode($faqsSrc, true) : $faqsSrc;
             }
-            
+
             // Get highlights (Prioritize new column)
             $highlights = [];
             if (!empty($tour->highlights)) {
@@ -530,7 +530,7 @@ Route::prefix('tours')->group(function () {
             if ($exclusionsSrc) {
                 $exclude = is_string($exclusionsSrc) ? json_decode($exclusionsSrc, true) : $exclusionsSrc;
             }
-            
+
             // Get gallery images (Robust ID/Path handling)
             $gallery = [];
             if ($tour->gallery) {
@@ -558,7 +558,7 @@ Route::prefix('tours')->group(function () {
                      }, $heroIds);
                  }
             }
-            
+
             // Fetch categories (Hydrate full objects from IDs)
             $categories = collect([]);
             if (!empty($tour->category_ids)) {
@@ -581,7 +581,7 @@ Route::prefix('tours')->group(function () {
             }
 
             $relatedToursQuery = Tour::where('status', 'publish')->where('id', '!=', $tour->id);
-            
+
             if (!empty($relatedTourIds) && is_array($relatedTourIds) && count($relatedTourIds) > 0) {
                 $relatedToursQuery->whereIn('id', $relatedTourIds);
             } else {
@@ -590,9 +590,9 @@ Route::prefix('tours')->group(function () {
                       // ->orWhere('category_id', $tour->category_id); // Deprecated single category check
                 });
             }
-            
+
             $relatedTours = $relatedToursQuery->limit(4)->get();
-            
+
             return response()->json([
                 'data' => [
                     'id' => $tour->id,
@@ -625,7 +625,7 @@ Route::prefix('tours')->group(function () {
                         'slug' => $tour->location->slug,
                         'image_url' => $tour->location->image_id ? parse_url(get_file_url($tour->location->image_id, 'full'), PHP_URL_PATH) : null,
                     ] : null,
-                    'categories' => $categories, 
+                    'categories' => $categories,
                     // gallery removed
                     'hero_slider' => $hero_slider,
                     'itinerary' => $itinerary,
@@ -676,7 +676,26 @@ Route::prefix('tours')->group(function () {
                                 $relatedCategories = \Modules\Tour\Models\TourCategory::whereIn('id', $catIds)->select('id', 'name', 'slug')->get();
                             }
                         }
-                        
+
+                        // Get image URL with fallbacks: image_id > banner_image_id > first hero_slider image
+                        $imageUrl = null;
+                        if ($t->image_id) {
+                            $imageUrl = parse_url(get_file_url($t->image_id, 'full'), PHP_URL_PATH);
+                        } elseif ($t->banner_image_id) {
+                            $imageUrl = parse_url(get_file_url($t->banner_image_id, 'full'), PHP_URL_PATH);
+                        } elseif ($t->hero_slider) {
+                            $heroIds = is_string($t->hero_slider) ? json_decode($t->hero_slider, true) : $t->hero_slider;
+                            if (is_array($heroIds) && count($heroIds) > 0) {
+                                $firstHeroId = $heroIds[0];
+                                if (is_numeric($firstHeroId)) {
+                                    $imageUrl = parse_url(get_file_url($firstHeroId, 'full'), PHP_URL_PATH);
+                                } else {
+                                    // It's already a path/URL
+                                    $imageUrl = $firstHeroId;
+                                }
+                            }
+                        }
+
                         return [
                             'id' => $t->id,
                             'title' => $t->title,
@@ -687,7 +706,7 @@ Route::prefix('tours')->group(function () {
                             'duration_type' => $t->duration_type,
                             'nights' => $t->nights,
                             'tour_type' => $t->tour_type,
-                            'image_url' => $t->image_id ? parse_url(get_file_url($t->image_id, 'full'), PHP_URL_PATH) : null,
+                            'image_url' => $imageUrl,
                             'destination' => $t->location ? [
                                 'id' => $t->location->id,
                                 'name' => $t->location->name,
@@ -763,7 +782,7 @@ Route::prefix('reviews')->group(function () {
         try {
             $query = \Modules\Review\Models\Review::query()
                 ->where('status', 'approved');
-            
+
             // Filter by featured
             if ($request->has('featured') && $request->featured === 'featured') {
                 $query->where(function($q) {
@@ -771,7 +790,7 @@ Route::prefix('reviews')->group(function () {
                       ->orWhere('show_on_homepage', 1);
                 });
             }
-            
+
             // Filter by object model (tour, hotel, etc)
             if ($request->has('object_model') && $request->object_model) {
                 $query->where('object_model', $request->object_model);
@@ -874,7 +893,7 @@ Route::prefix('reviews')->group(function () {
                 ->orderBy('created_at', 'desc')
                 ->limit(10)
                 ->get();
-            
+
             return response()->json(['data' => $reviews]);
         } catch (\Exception $e) {
             return response()->json(['data' => []]);
@@ -890,7 +909,7 @@ Route::prefix('reviews')->group(function () {
                 'content' => 'required',
                 'rating' => 'required|numeric|min:1|max:5',
             ];
-            
+
             // If tour_id is provided, use it; otherwise require object_id and object_model
             if ($request->has('tour_id') && $request->input('tour_id')) {
                 $rules['tour_id'] = 'required|numeric';
@@ -898,7 +917,7 @@ Route::prefix('reviews')->group(function () {
                 $rules['object_id'] = 'required';
                 $rules['object_model'] = 'required';
             }
-            
+
             $validator = \Illuminate\Support\Facades\Validator::make($request->all(), $rules);
 
             if ($validator->fails()) {
@@ -908,7 +927,7 @@ Route::prefix('reviews')->group(function () {
             // Determine object_id and object_model from tour_id if provided
             $objectId = $request->input('object_id');
             $objectModel = $request->input('object_model', 'tour');
-            
+
             if ($request->has('tour_id') && $request->input('tour_id')) {
                 $objectId = $request->input('tour_id');
                 $objectModel = 'tour';
@@ -942,7 +961,7 @@ Route::prefix('reviews')->group(function () {
             }
 
             $review->save();
-            
+
             // Handle dynamic meta array
             if ($request->has('meta') && is_array($request->input('meta'))) {
                 foreach ($request->input('meta') as $metaItem) {
@@ -971,17 +990,17 @@ Route::prefix('news')->group(function () {
     Route::get('/', function (Request $request) {
         try {
             $query = \Modules\News\Models\News::where('status', 'publish');
-            
+
             // Filter by category
             if ($request->has('cat_id') && $request->cat_id) {
                 $query->where('cat_id', $request->cat_id);
             }
-            
+
             // Filter by featured
             if ($request->has('is_featured') && $request->is_featured) {
                 $query->where('is_featured', 1);
             }
-            
+
             // Search
             if ($request->has('s') && $request->s) {
                 $query->where('title', 'LIKE', '%' . $request->s . '%');
@@ -1012,7 +1031,7 @@ Route::prefix('news')->group(function () {
                         }
                     }
                 }
-                
+
                 // Clean image URL (return relative path for frontend robustness)
                 $imageUrl = null;
                 if ($post->image_id) {
@@ -1040,7 +1059,7 @@ Route::prefix('news')->group(function () {
                     'updated_at' => $post->updated_at,
                 ];
             });
-            
+
             return response()->json([
                 'data' => $data,
                 'total' => $posts->total(),
@@ -1053,7 +1072,7 @@ Route::prefix('news')->group(function () {
             return response()->json(['data' => [], 'total' => 0, 'error' => $e->getMessage()]);
         }
     });
-    
+
     // Get featured posts
     Route::get('/featured', function (Request $request) {
         try {
@@ -1086,7 +1105,7 @@ Route::prefix('news')->group(function () {
                         }
                     }
                 }
-                
+
                 // Clean image URL (return relative path for frontend robustness)
                 $imageUrl = null;
                 if ($post->image_id) {
@@ -1112,13 +1131,13 @@ Route::prefix('news')->group(function () {
                     'created_at' => $post->created_at,
                 ];
             });
-            
+
             return response()->json(['data' => $data]);
         } catch (\Exception $e) {
             return response()->json(['data' => [], 'error' => $e->getMessage()]);
         }
     });
-    
+
     // Get public categories
     Route::get('/categories', function () {
         try {
@@ -1130,7 +1149,7 @@ Route::prefix('news')->group(function () {
             return response()->json(['data' => []]);
         }
     });
-    
+
     // Get all locations for blogs
     Route::get('/all-locations', function () {
         try {
@@ -1150,7 +1169,7 @@ Route::prefix('news')->group(function () {
                 ->where('status', 'publish')
                 ->with(['location']) // Eager load location
                 ->first();
-            
+
             if (!$post) {
                 return response()->json(['error' => 'Post not found'], 404);
             }
@@ -1161,13 +1180,13 @@ Route::prefix('news')->group(function () {
             if ($lang && !is_default_lang($lang)) {
                 $translation = $post->translate($lang);
             }
-            
+
             // Get category
             $category = null;
             if ($post->cat_id) {
                 $category = \Modules\News\Models\NewsCategory::find($post->cat_id);
             }
-            
+
             // Get author info
             $author = null;
             if ($post->create_user) {
@@ -1188,7 +1207,7 @@ Route::prefix('news')->group(function () {
                     }
                 }
             }
-            
+
             // Clean image URL helper (return relative path for frontend robustness)
             $getImageUrl = function($imageId) {
                 if (!$imageId) return null;
@@ -1197,22 +1216,22 @@ Route::prefix('news')->group(function () {
                 $path = '/uploads/' . ltrim($media->file_path, '/');
                 return str_replace('/uploads/uploads/', '/uploads/', $path);
             };
-            
+
             // Get related posts
             $relatedPostsResolved = [];
-            
+
             // 1. Try to get manually assigned related posts IDs
             $manualRelatedIds = $post->related_posts;
             if (is_string($manualRelatedIds)) {
                 $manualRelatedIds = json_decode($manualRelatedIds, true);
             }
-            
+
             if (!empty($manualRelatedIds) && is_array($manualRelatedIds)) {
                 $relatedPostsResolved = \Modules\News\Models\News::where('status', 'publish')
                     ->whereIn('id', $manualRelatedIds)
                     ->get();
             }
-            
+
             // 2. Fallback to Category-based related posts if manual list is empty
             if (empty($relatedPostsResolved) || $relatedPostsResolved->isEmpty()) {
                 $relatedPostsResolved = \Modules\News\Models\News::where('status', 'publish')
@@ -1225,8 +1244,8 @@ Route::prefix('news')->group(function () {
                     ->get();
             }
 
-            // 3. Map to output format (Translate related posts titles too?) 
-            // For now, let's keep related posts simple or translate them if possible. 
+            // 3. Map to output format (Translate related posts titles too?)
+            // For now, let's keep related posts simple or translate them if possible.
             // Ideally related posts should also respect lang, but it might be expensive.
             // Let's stick to main post translation first.
 
@@ -1241,7 +1260,7 @@ Route::prefix('news')->group(function () {
                     'created_at' => $p->created_at,
                 ];
             });
-            
+
             return response()->json([
                 'data' => [
                     'id' => $post->id,
@@ -1291,9 +1310,9 @@ Route::prefix('pages')->group(function () {
     Route::get('/menu', function (Request $request) {
         try {
             $location = $request->input('location', 'menu'); // menu, header, footer
-            
+
             $query = \Modules\Page\Models\Page::where('status', 'publish');
-            
+
             if ($location === 'header') {
                 $query->where('show_in_header', true);
             } elseif ($location === 'footer') {
@@ -1301,7 +1320,7 @@ Route::prefix('pages')->group(function () {
             } else {
                 $query->where('show_in_menu', true);
             }
-            
+
             $pages = $query->orderBy('display_order', 'asc')->get();
 
             // Transform with translation if lang is provided
@@ -1337,7 +1356,7 @@ Route::prefix('pages')->group(function () {
             $page = \Modules\Page\Models\Page::where('status', 'publish')
                 ->where('is_homepage', true)
                 ->first();
-            
+
             if (!$page) {
                 // Fallback to slug 'home' or first page
                 $page = \Modules\Page\Models\Page::where('status', 'publish')
@@ -1348,7 +1367,7 @@ Route::prefix('pages')->group(function () {
             if (!$page) {
                 return response()->json(['error' => 'Homepage not found'], 404);
             }
-            
+
             $pageData = $page->toArray();
 
             // Handle Translations
@@ -1366,7 +1385,7 @@ Route::prefix('pages')->group(function () {
             $pageData['og_image_url'] = $page->og_image_id ? get_file_url($page->og_image_id, 'full') : null;
             $pageData['twitter_image_url'] = $page->twitter_image_id ? get_file_url($page->twitter_image_id, 'full') : null;
             $pageData['banner_image_url'] = $page->banner_image_id ? get_file_url($page->banner_image_id, 'full') : null;
-            
+
             return response()->json(['data' => $pageData]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -1379,11 +1398,11 @@ Route::prefix('pages')->group(function () {
             $page = \Modules\Page\Models\Page::where('slug', $slug)
                 ->where('status', 'publish')
                 ->first();
-            
+
             if (!$page) {
                 return response()->json(['error' => 'Page not found'], 404);
             }
-            
+
             $pageData = $page->toArray();
 
             // Handle Translations
@@ -1400,7 +1419,7 @@ Route::prefix('pages')->group(function () {
 
             $pageData['og_image_url'] = $page->og_image_id ? get_file_url($page->og_image_id, 'full') : null;
             $pageData['twitter_image_url'] = $page->twitter_image_id ? get_file_url($page->twitter_image_id, 'full') : null;
-            
+
             return response()->json(['data' => $pageData]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -1431,7 +1450,7 @@ Route::post('/contact/store', function (Request $request) {
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        
+
         return response()->json(['success' => true, 'id' => $id]);
     } catch (\Exception $e) {
         return response()->json(['error' => $e->getMessage()], 500);
@@ -1444,7 +1463,7 @@ Route::post('/contact/store', function (Request $request) {
 Route::prefix('page-settings')->group(function () {
     // Get page settings by slug (public - for frontend rendering)
     Route::get('/{slug}', [\App\Http\Controllers\Api\PageSettingsController::class, 'show']);
-    
+
     // Validate preview token
     Route::get('/{slug}/validate-preview', [\App\Http\Controllers\Api\PageSettingsController::class, 'validatePreviewToken']);
 });
