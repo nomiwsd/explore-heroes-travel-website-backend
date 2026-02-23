@@ -221,6 +221,24 @@ Route::prefix('destinations')->group(function () {
                     'robots_meta' => $destination->robots_meta,
                     'schema_markup' => $destination->schema_markup,
                     'tours' => $tours->map(function ($tour) {
+                        // Get image URL with fallbacks: image_id > banner_image_id > first hero_slider image
+                        $imageUrl = null;
+                        if ($tour->image_id) {
+                            $imageUrl = parse_url(get_file_url($tour->image_id, 'full'), PHP_URL_PATH);
+                        } elseif ($tour->banner_image_id) {
+                            $imageUrl = parse_url(get_file_url($tour->banner_image_id, 'full'), PHP_URL_PATH);
+                        } elseif ($tour->hero_slider) {
+                            $heroIds = is_string($tour->hero_slider) ? json_decode($tour->hero_slider, true) : $tour->hero_slider;
+                            if (is_array($heroIds) && count($heroIds) > 0) {
+                                $firstHeroId = $heroIds[0];
+                                if (is_numeric($firstHeroId)) {
+                                    $imageUrl = parse_url(get_file_url($firstHeroId, 'full'), PHP_URL_PATH);
+                                } else {
+                                    $imageUrl = $firstHeroId;
+                                }
+                            }
+                        }
+
                         return [
                             'id' => $tour->id,
                             'title' => $tour->title,
@@ -228,7 +246,7 @@ Route::prefix('destinations')->group(function () {
                             'price' => $tour->price,
                             'sale_price' => $tour->sale_price,
                             'duration' => $tour->duration,
-                            'image_url' => $tour->image_id ? get_file_url($tour->image_id, 'full') : null,
+                            'image_url' => $imageUrl,
                         ];
                     }),
                 ],
@@ -431,6 +449,25 @@ Route::prefix('tours')->group(function () {
                          }
                      }
 
+                    // Get image URL with fallbacks: image_id > banner_image_id > first hero_slider image
+                    $imageUrl = null;
+                    if ($tour->image_id) {
+                        $imageUrl = parse_url(get_file_url($tour->image_id, 'full'), PHP_URL_PATH);
+                    } elseif ($tour->banner_image_id) {
+                        $imageUrl = parse_url(get_file_url($tour->banner_image_id, 'full'), PHP_URL_PATH);
+                    } elseif ($tour->hero_slider) {
+                        $heroIds = is_string($tour->hero_slider) ? json_decode($tour->hero_slider, true) : $tour->hero_slider;
+                        if (is_array($heroIds) && count($heroIds) > 0) {
+                            $firstHeroId = $heroIds[0];
+                            if (is_numeric($firstHeroId)) {
+                                $imageUrl = parse_url(get_file_url($firstHeroId, 'full'), PHP_URL_PATH);
+                            } else {
+                                // It's already a path/URL
+                                $imageUrl = $firstHeroId;
+                            }
+                        }
+                    }
+
                     return [
                         'id' => $tour->id,
                         'title' => $translation->title ?? $tour->title,
@@ -442,7 +479,7 @@ Route::prefix('tours')->group(function () {
                         'duration_type' => $tour->duration_type,
                         'nights' => $tour->nights, // Updated to use nights column
                         'duration_nights' => $tour->nights, // Legacy support
-                        'image_url' => $tour->image_id ? get_file_url($tour->image_id, 'full') : null,
+                        'image_url' => $imageUrl,
                         'banner_url' => $tour->banner_image_url ? $tour->banner_image_url : ($tour->banner_image_id ? get_file_url($tour->banner_image_id, 'full') : null),
                         'is_featured' => $tour->is_featured,
                         'tour_type' => $tour->tour_type,
