@@ -491,43 +491,64 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
         try {
             $sitemapContent = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
             $sitemapContent .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
-            
-            $baseUrl = config('app.url', 'https://exploreheros.com');
-            
-            $sitemapContent .= "<url><loc>{$baseUrl}</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n";
-            
-            // Tours
+
+            $baseUrl = rtrim(config('app.url', 'https://exploreheros.com'), '/');
+
+            $sitemapContent .= "<url><loc>{$baseUrl}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n";
+
+            // Tours (Eloquent auto-handles soft deletes)
             $tours = Tour::where('status', 'publish')->get(['slug']);
             foreach ($tours as $tour) {
+                if (!$tour->slug) continue;
                 $sitemapContent .= "<url><loc>{$baseUrl}/tours/{$tour->slug}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n";
             }
-            
-            // Destinations
+
+            // Destinations (Eloquent auto-handles soft deletes)
             $destinations = Location::where('status', 'publish')->get(['slug']);
             foreach ($destinations as $dest) {
+                if (!$dest->slug) continue;
                 $sitemapContent .= "<url><loc>{$baseUrl}/destinations/{$dest->slug}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n";
             }
 
-            // Pages
-            $pages = DB::table('core_pages')->where('status', 'publish')->get(['slug']);
+            // Pages (raw query – manually exclude soft-deleted rows)
+            $pages = DB::table('core_pages')
+                ->where('status', 'publish')
+                ->whereNull('deleted_at')
+                ->get(['slug']);
             foreach ($pages as $page) {
+                if (!$page->slug) continue;
                 $sitemapContent .= "<url><loc>{$baseUrl}/{$page->slug}</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n";
             }
 
-            // Blog
-            $posts = DB::table('core_news')->where('status', 'publish')->get(['slug']);
+            // Blog (raw query – manually exclude soft-deleted rows)
+            $posts = DB::table('core_news')
+                ->where('status', 'publish')
+                ->whereNull('deleted_at')
+                ->get(['slug']);
             foreach ($posts as $post) {
+                if (!$post->slug) continue;
                 $sitemapContent .= "<url><loc>{$baseUrl}/blog/{$post->slug}</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>\n";
             }
-            
+
             $sitemapContent .= '</urlset>';
-            
+
+            // Try public_path() first; fallback to base_path('public/')
             $sitemapPath = public_path('sitemap.xml');
-            file_put_contents($sitemapPath, $sitemapContent);
-            
+            if (!is_writable(dirname($sitemapPath))) {
+                $sitemapPath = base_path('public/sitemap.xml');
+            }
+
+            $written = file_put_contents($sitemapPath, $sitemapContent);
+            if ($written === false) {
+                return response()->json([
+                    'success' => false,
+                    'error'   => 'Could not write sitemap to disk. Check write permissions for: ' . dirname($sitemapPath),
+                ], 500);
+            }
+
             return response()->json(['success' => true, 'url' => $baseUrl . '/sitemap.xml']);
         } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
+            return response()->json(['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()], 500);
         }
     });
 
