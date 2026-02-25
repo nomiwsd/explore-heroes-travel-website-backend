@@ -30,24 +30,24 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
     Route::get('/', function (Request $request) {
         try {
             $query = Page::with('author');
-            
+
             // Search filter
             if ($request->has('s') && $request->s) {
                 $query->where('title', 'LIKE', '%' . $request->s . '%');
             }
-            
+
             // Status filter
             if ($request->has('status') && $request->status !== 'all') {
                 $query->where('status', $request->status);
             }
-            
+
             // Template filter
             if ($request->has('template') && $request->template) {
                 $query->where('template', $request->template);
             }
-            
+
             $pages = $query->orderBy('id', 'desc')->paginate($request->input('limit', 20));
-            
+
             return response()->json([
                 'data' => $pages->items(),
                 'total' => $pages->total(),
@@ -115,7 +115,7 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
                     'og_description' => $page->og_description,
                     'og_image_id' => $page->og_image_id,
                     'og_image_url' => $ogImageUrl,
-                    
+
                     'twitter_image_id' => $page->twitter_image_id,
                     'twitter_image_url' => $twitterImageUrl,
                     'twitter_title' => $page->twitter_title,
@@ -142,7 +142,7 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
         }
 
     })->middleware('permission:page_view');
-    
+
     // Store/Update page
     Route::middleware(['permission:page_create'])->post('/store/{id?}', function (Request $request, $id = null) {
         try {
@@ -188,6 +188,10 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
                 'is_homepage',
                 'template_id',
                 'template',
+                // SEO Meta Fields
+                'meta_title',
+                'meta_desc',
+                'meta_keywords',
                 // SEO Fields
                 'og_title',
                 'og_description',
@@ -241,13 +245,13 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Delete page
     Route::middleware(['permission:page_delete'])->delete('/{id}', function ($id) {
         try {
             $page = Page::findOrFail($id);
             $page->delete();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Page deleted successfully',
@@ -256,17 +260,17 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Bulk edit
     Route::middleware(['permission:page_update'])->post('/bulkEdit', function (Request $request) {
         try {
             $ids = $request->input('ids', []);
             $action = $request->input('action');
-            
+
             if (empty($ids)) {
                 return response()->json(['error' => 'No items selected'], 400);
             }
-            
+
             switch ($action) {
                 case 'delete':
                     Page::whereIn('id', $ids)->delete();
@@ -280,7 +284,7 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
                 default:
                     return response()->json(['error' => 'Invalid action'], 400);
             }
-            
+
             return response()->json([
                 'success' => true,
                 'message' => ucfirst($action) . ' completed successfully',
@@ -289,7 +293,7 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Get templates
     Route::get('/templates', function () {
         try {
@@ -305,7 +309,7 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
             return response()->json([]);
         }
     });
-    
+
     // Get statistics
     Route::get('/statistics', function () {
         try {
@@ -314,7 +318,7 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
                 'published' => Page::where('status', 'publish')->count(),
                 'draft' => Page::where('status', 'draft')->count(),
             ];
-            
+
             return response()->json($stats);
         } catch (\Exception $e) {
             return response()->json([]);
