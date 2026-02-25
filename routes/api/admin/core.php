@@ -604,7 +604,13 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
     // Robots.txt
     Route::get('/robots', function () {
         try {
-            $content = Settings::item('robots_txt_content', "User-agent: *\nAllow: /\n\nSitemap: " . config('app.url') . "/sitemap.xml");
+            $robotsPath = public_path('robots.txt');
+            // If file exists, read from it; otherwise return default
+            if (file_exists($robotsPath)) {
+                $content = file_get_contents($robotsPath);
+            } else {
+                $content = "User-agent: *\nDisallow:\n\nSitemap: " . rtrim(config('app.url', 'https://exploreheros.com'), '/') . "/sitemap.xml";
+            }
             return response()->json(['content' => $content]);
         } catch (\Exception $e) {
             return response()->json(['content' => '']);
@@ -614,7 +620,24 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
     Route::post('/robots', function (Request $request) {
         try {
             $content = $request->input('content');
-            Settings::store('robots_txt_content', $content, 'seo');
+            $robotsPath = public_path('robots.txt');
+
+            // Ensure public directory is writable
+            if (!is_writable(dirname($robotsPath))) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Cannot write to public directory. Check permissions.'
+                ], 500);
+            }
+
+            $written = file_put_contents($robotsPath, $content);
+            if ($written === false) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Could not write robots.txt to disk. Check write permissions.'
+                ], 500);
+            }
+
             return response()->json(['content' => $content, 'success' => true]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
