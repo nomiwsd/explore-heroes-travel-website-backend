@@ -23,13 +23,13 @@ Route::prefix('module/core/menu')->group(function () {
     Route::get('/', function (Request $request) {
         try {
             $query = Menu::query();
-            
+
             if ($request->has('s') && $request->s) {
                 $query->where('name', 'LIKE', '%' . $request->s . '%');
             }
-            
+
             $menus = $query->orderBy('id', 'desc')->get();
-            
+
             return response()->json([
                 'data' => $menus->map(function ($menu) {
                     return [
@@ -47,12 +47,12 @@ Route::prefix('module/core/menu')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Get single menu
     Route::get('/edit/{id}', function ($id) {
         try {
             $menu = Menu::findOrFail($id);
-            
+
             return response()->json([
                 'data' => [
                     'id' => $menu->id,
@@ -66,7 +66,7 @@ Route::prefix('module/core/menu')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Store/Update menu
     Route::middleware('auth:sanctum')->post('/store/{id?}', function (Request $request, $id = null) {
         try {
@@ -76,13 +76,13 @@ Route::prefix('module/core/menu')->group(function () {
             } else {
                 $menu = new Menu();
             }
-            
+
             $menu->name = $request->input('name');
             $menu->items = $request->input('items');
             $menu->locations = $request->input('locations', []);
             $menu->status = $request->input('status', 'publish');
             $menu->save();
-            
+
             return response()->json([
                 'success' => true,
                 'data' => ['id' => $menu->id],
@@ -91,13 +91,13 @@ Route::prefix('module/core/menu')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Delete menu
     Route::middleware('auth:sanctum')->delete('/{id}', function ($id) {
         try {
             $menu = Menu::findOrFail($id);
             $menu->delete();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Menu deleted successfully',
@@ -106,17 +106,17 @@ Route::prefix('module/core/menu')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Bulk edit menus
     Route::middleware('auth:sanctum')->post('/bulkEdit', function (Request $request) {
         try {
             $ids = $request->input('ids', []);
             $action = $request->input('action');
-            
+
             if (empty($ids)) {
                 return response()->json(['error' => 'No items selected'], 400);
             }
-            
+
             switch ($action) {
                 case 'delete':
                     $items = Menu::whereIn('id', $ids)->get();
@@ -133,7 +133,7 @@ Route::prefix('module/core/menu')->group(function () {
                 default:
                     return response()->json(['error' => 'Invalid action'], 400);
             }
-            
+
             return response()->json([
                 'success' => true,
                 'message' => ucfirst($action) . ' completed successfully',
@@ -142,7 +142,7 @@ Route::prefix('module/core/menu')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Get menu item types
     Route::get('/getTypes', function () {
         try {
@@ -197,20 +197,20 @@ Route::prefix('module/core/menu')->group(function () {
                         ->map(fn($item) => ['id' => $item->id, 'name' => $item->name, 'url' => '/tours?category=' . $item->slug]),
                 ],
             ];
-            
+
             return response()->json($types);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
         }
     });
-    
+
     // Search items by type
     Route::get('/searchItems', function (Request $request) {
         try {
             $type = $request->input('type');
             $query = $request->input('q', '');
             $items = [];
-            
+
             switch ($type) {
                 case 'page':
                     $items = DB::table('core_pages')
@@ -238,13 +238,13 @@ Route::prefix('module/core/menu')->group(function () {
                         ->map(fn($item) => ['id' => $item->id, 'name' => $item->name, 'url' => '/destinations/' . $item->slug]);
                     break;
             }
-            
+
             return response()->json($items);
         } catch (\Exception $e) {
             return response()->json([]);
         }
     });
-    
+
     // Get items by type
     Route::get('/getItems/{type}', function ($type, Request $request) {
         try {
@@ -252,7 +252,7 @@ Route::prefix('module/core/menu')->group(function () {
             $perPage = 20;
             $items = [];
             $total = 0;
-            
+
             switch ($type) {
                 case 'page':
                     $query = DB::table('core_pages')->where('status', 'publish');
@@ -282,7 +282,7 @@ Route::prefix('module/core/menu')->group(function () {
                         ->map(fn($item) => ['id' => $item->id, 'name' => $item->name, 'url' => '/destinations/' . $item->slug]);
                     break;
             }
-            
+
             return response()->json(['data' => $items, 'total' => $total]);
         } catch (\Exception $e) {
             return response()->json(['data' => [], 'total' => 0]);
@@ -306,18 +306,18 @@ Route::prefix('module/core/settings')->group(function () {
             return response()->json(['settings' => [], 'group' => $group, 'error' => $e->getMessage()]);
         }
     });
-    
+
     // Update settings
     Route::middleware('auth:sanctum')->post('/store/{group?}', function (Request $request, $group = 'general') {
         try {
             $data = $request->all();
-            
+
             foreach ($data as $key => $value) {
                 if ($key !== '_token') {
                     Settings::store($key, $value, $group);
                 }
             }
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Settings updated successfully',
@@ -326,19 +326,19 @@ Route::prefix('module/core/settings')->group(function () {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Upload file (logo, favicon)
     Route::middleware('auth:sanctum')->post('/upload', function (Request $request) {
         try {
             $file = $request->file('logo') ?? $request->file('favicon');
-            
+
             if (!$file) {
                 return response()->json(['error' => 'No file uploaded'], 400);
             }
-            
+
             $path = $file->store('uploads/settings', 'public');
             $url = asset('storage/' . $path);
-            
+
             return response()->json([
                 'url' => $url,
                 'path' => $path,
@@ -376,7 +376,7 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // 301 Redirects
     Route::get('/redirects', function (Request $request) {
         try {
@@ -385,26 +385,26 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
             }
 
             $query = DB::table('bc_redirects');
-            
+
             if ($request->has('search') && $request->search) {
                 $query->where(function ($q) use ($request) {
                     $q->where('old_url', 'LIKE', '%' . $request->search . '%')
                       ->orWhere('new_url', 'LIKE', '%' . $request->search . '%');
                 });
             }
-            
+
             if ($request->has('status') && $request->status !== 'all') {
                 $query->where('is_active', $request->status === 'active' ? 1 : 0);
             }
-            
+
             $redirects = $query->orderBy('id', 'desc')->get();
-            
+
             return response()->json(['data' => $redirects]);
         } catch (\Exception $e) {
             return response()->json(['data' => [], 'error' => $e->getMessage()]);
         }
     });
-    
+
     Route::get('/redirects/{id}', function ($id) {
         try {
             $redirect = DB::table('bc_redirects')->where('id', $id)->first();
@@ -413,7 +413,7 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     Route::post('/redirects/store/{id?}', function (Request $request, $id = null) {
         try {
             if (!Schema::hasTable('bc_redirects')) {
@@ -426,7 +426,7 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
                     $table->timestamps();
                 });
             }
-            
+
             $data = [
                 'old_url' => $request->input('old_url'),
                 'new_url' => $request->input('new_url'),
@@ -434,29 +434,29 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
                 'is_active' => $request->input('is_active', true),
                 'updated_at' => now(),
             ];
-            
+
             if ($id) {
                 DB::table('bc_redirects')->where('id', $id)->update($data);
             } else {
                 $data['created_at'] = now();
                 $id = DB::table('bc_redirects')->insertGetId($data);
             }
-            
+
             return response()->json(['success' => true, 'id' => $id]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     Route::post('/redirects/bulkEdit', function (Request $request) {
         try {
             $ids = $request->input('ids', []);
             $action = $request->input('action');
-            
+
             if ($action === 'delete') {
                 DB::table('bc_redirects')->whereIn('id', $ids)->delete();
             }
-            
+
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -464,20 +464,43 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
     });
 
     // Sitemap
-    // Route::get('/sitemap', function () {
-    //     try {
-    //         $settings = Settings::getSettings('sitemap');
-    //         return response()->json($settings);
-    //     } catch (\Exception $e) {
-    //         return response()->json([]);
-    //     }
-    // });
+    Route::get('/sitemap', function () {
+        try {
+            $settings = Settings::getSettings('sitemap');
+            // Settings are stored with 'sitemap_' prefix — strip it and cast types
+            return response()->json([
+                'enabled'              => filter_var($settings['sitemap_enabled'] ?? true, FILTER_VALIDATE_BOOLEAN),
+                'include_pages'        => filter_var($settings['sitemap_include_pages'] ?? true, FILTER_VALIDATE_BOOLEAN),
+                'include_tours'        => filter_var($settings['sitemap_include_tours'] ?? true, FILTER_VALIDATE_BOOLEAN),
+                'include_destinations' => filter_var($settings['sitemap_include_destinations'] ?? true, FILTER_VALIDATE_BOOLEAN),
+                'include_blog'         => filter_var($settings['sitemap_include_blog'] ?? true, FILTER_VALIDATE_BOOLEAN),
+                'frequency'            => $settings['sitemap_frequency'] ?? 'weekly',
+                'priority'             => (float)($settings['sitemap_priority'] ?? 0.8),
+                'exclude_urls'         => json_decode($settings['sitemap_exclude_urls'] ?? '[]', true) ?: [],
+                'custom_urls'          => json_decode($settings['sitemap_custom_urls'] ?? '[]', true) ?: [],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'enabled'              => true,
+                'include_pages'        => true,
+                'include_tours'        => true,
+                'include_destinations' => true,
+                'include_blog'         => true,
+                'frequency'            => 'weekly',
+                'priority'             => 0.8,
+                'exclude_urls'         => [],
+                'custom_urls'          => [],
+            ]);
+        }
+    });
 
     Route::post('/sitemap', function (Request $request) {
         try {
             $data = $request->all();
             foreach ($data as $key => $value) {
                 if ($key !== '_token') {
+                    // JSON-encode arrays before storing
+                    $value = is_array($value) ? json_encode($value) : $value;
                     Settings::store('sitemap_' . $key, $value, 'sitemap');
                 }
             }
@@ -486,48 +509,74 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     Route::post('/sitemap/generate', function () {
         try {
-            $sitemapContent = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+            // Load saved sitemap settings
+            $raw              = Settings::getSettings('sitemap');
+            $includePages     = filter_var($raw['sitemap_include_pages']        ?? true,  FILTER_VALIDATE_BOOLEAN);
+            $includeTours     = filter_var($raw['sitemap_include_tours']        ?? true,  FILTER_VALIDATE_BOOLEAN);
+            $includeDest      = filter_var($raw['sitemap_include_destinations'] ?? true,  FILTER_VALIDATE_BOOLEAN);
+            $includeBlog      = filter_var($raw['sitemap_include_blog']         ?? true,  FILTER_VALIDATE_BOOLEAN);
+            $frequency        = $raw['sitemap_frequency'] ?? 'weekly';
+            $priority         = (float)($raw['sitemap_priority'] ?? 0.8);
+            $excludeUrls      = json_decode($raw['sitemap_exclude_urls'] ?? '[]', true) ?: [];
+
+            $sitemapContent  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
             $sitemapContent .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
 
             $baseUrl = rtrim(config('app.url', 'https://exploreheros.com'), '/');
 
             $sitemapContent .= "<url><loc>{$baseUrl}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n";
 
-            // Tours (Eloquent auto-handles soft deletes)
-            $tours = Tour::where('status', 'publish')->get(['slug']);
-            foreach ($tours as $tour) {
-                if (!$tour->slug) continue;
-                $sitemapContent .= "<url><loc>{$baseUrl}/tours/{$tour->slug}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n";
+            // Tours
+            if ($includeTours) {
+                $tours = Tour::where('status', 'publish')->get(['slug']);
+                foreach ($tours as $tour) {
+                    if (!$tour->slug) continue;
+                    $url = "{$baseUrl}/tours/{$tour->slug}";
+                    if (in_array($url, $excludeUrls)) continue;
+                    $sitemapContent .= "<url><loc>{$url}</loc><changefreq>{$frequency}</changefreq><priority>{$priority}</priority></url>\n";
+                }
             }
 
-            // Destinations (Eloquent auto-handles soft deletes)
-            $destinations = Location::where('status', 'publish')->get(['slug']);
-            foreach ($destinations as $dest) {
-                if (!$dest->slug) continue;
-                $sitemapContent .= "<url><loc>{$baseUrl}/destinations/{$dest->slug}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>\n";
+            // Destinations
+            if ($includeDest) {
+                $destinations = Location::where('status', 'publish')->get(['slug']);
+                foreach ($destinations as $dest) {
+                    if (!$dest->slug) continue;
+                    $url = "{$baseUrl}/destinations/{$dest->slug}";
+                    if (in_array($url, $excludeUrls)) continue;
+                    $sitemapContent .= "<url><loc>{$url}</loc><changefreq>{$frequency}</changefreq><priority>{$priority}</priority></url>\n";
+                }
             }
 
             // Pages (raw query – manually exclude soft-deleted rows)
-            $pages = DB::table('core_pages')
-                ->where('status', 'publish')
-                ->whereNull('deleted_at')
-                ->get(['slug']);
-            foreach ($pages as $page) {
-                if (!$page->slug) continue;
-                $sitemapContent .= "<url><loc>{$baseUrl}/{$page->slug}</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n";
+            if ($includePages) {
+                $pages = DB::table('core_pages')
+                    ->where('status', 'publish')
+                    ->whereNull('deleted_at')
+                    ->get(['slug']);
+                foreach ($pages as $page) {
+                    if (!$page->slug) continue;
+                    $url = "{$baseUrl}/{$page->slug}";
+                    if (in_array($url, $excludeUrls)) continue;
+                    $sitemapContent .= "<url><loc>{$url}</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n";
+                }
             }
 
             // Blog (raw query – manually exclude soft-deleted rows)
-            $posts = DB::table('core_news')
-                ->where('status', 'publish')
-                ->whereNull('deleted_at')
-                ->get(['slug']);
-            foreach ($posts as $post) {
-                if (!$post->slug) continue;
-                $sitemapContent .= "<url><loc>{$baseUrl}/blog/{$post->slug}</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>\n";
+            if ($includeBlog) {
+                $posts = DB::table('core_news')
+                    ->where('status', 'publish')
+                    ->whereNull('deleted_at')
+                    ->get(['slug']);
+                foreach ($posts as $post) {
+                    if (!$post->slug) continue;
+                    $url = "{$baseUrl}/blog/{$post->slug}";
+                    if (in_array($url, $excludeUrls)) continue;
+                    $sitemapContent .= "<url><loc>{$url}</loc><changefreq>{$frequency}</changefreq><priority>0.7</priority></url>\n";
+                }
             }
 
             $sitemapContent .= '</urlset>';
