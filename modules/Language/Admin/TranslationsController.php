@@ -1,7 +1,6 @@
 <?php
 namespace Modules\Language\Admin;
 
-use function Clue\StreamFilter\fun;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Modules\AdminController;
@@ -518,104 +517,142 @@ class TranslationsController extends AdminController
      */
     public function buildTranslationsApi(Request $request, $locale)
     {
-        $lang = Language::where('locale', $locale)->first();
-        if (empty($lang)) {
-            return response()->json(['error' => 'Language not found'], 404);
-        }
+        try {
+            $lang = Language::where('locale', $locale)->first();
+            if (empty($lang)) {
+                return response()->json(['error' => 'Language not found'], 404);
+            }
 
-        // Build the JSON file in resources/lang
-        $file = base_path('resources/lang/' . $lang->locale . '.json');
+            // Fetch all translated strings for this locale joined with raw source keys
+            $query = Translation::select([
+                'core_translations.*',
+                't.string as origin'
+            ])->where('core_translations.locale', $lang->locale)
+              ->whereRaw("IFNULL(core_translations.string,'') != '' ");
 
-        if (!is_writable(base_path('resources/lang'))) {
+            $query->join('core_translations as t', function ($join) use ($lang) {
+                $join->on('t.id', '=', 'core_translations.parent_id');
+                $join->where('t.locale', 'raw');
+            });
+
+            $json = [];
+            $rows = $query->get();
+            if (!empty($rows)) {
+                foreach ($rows as $row) {
+                    $json[$row['origin']] = $row['string'];
+                }
+            }
+
+            $jsonContent = json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            $writtenFile = null;
+
+            // -----------------------------------------------------------------
+            // 1. Write to resources/lang (backend lang files)
+            // -----------------------------------------------------------------
+            try {
+                // Determine correct lang directory: Laravel 9+ uses base_path('lang'),
+                // older versions use base_path('resources/lang')
+                $langDir = function_exists('lang_path') ? lang_path() : base_path('lang');
+                if (!is_dir($langDir)) {
+                    $langDir = base_path('resources/lang');
+                }
+
+                // Ensure directory exists
+                if (!is_dir($langDir)) {
+                    @mkdir($langDir, 0755, true);
+                }
+
+                if (is_dir($langDir)) {
+                    $langFile = $langDir . '/' . $lang->locale . '.json';
+                    if (is_writable($langDir) || (file_exists($langFile) && is_writable($langFile))) {
+                        $handle = @fopen($langFile, 'w');
+                        if ($handle) {
+                            fwrite($handle, $jsonContent);
+                            fclose($handle);
+                            $writtenFile = $langFile;
+                        }
+                    } else {
+                        Log::warning("buildTranslationsApi: lang dir not writable: {$langDir}");
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error("buildTranslationsApi: failed to write lang file: " . $e->getMessage());
+            }
+
+            // -----------------------------------------------------------------
+            // 2. Write to storage/app/translations (always writable fallback)
+            // -----------------------------------------------------------------
+            try {
+                $storageDir = storage_path('app/translations');
+                if (!is_dir($storageDir)) {
+                    @mkdir($storageDir, 0755, true);
+                }
+                if (is_dir($storageDir) && is_writable($storageDir)) {
+                    $storageFile = $storageDir . '/' . $lang->locale . '.json';
+                    file_put_contents($storageFile, $jsonContent);
+                    if (!$writtenFile) {
+                        $writtenFile = 'storage/app/translations/' . $lang->locale . '.json';
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error("buildTranslationsApi: failed to write storage file: " . $e->getMessage());
+            }
+
+            // -----------------------------------------------------------------
+            // 3. Write to public/locales (for frontend HTTP access)
+            // -----------------------------------------------------------------
+            try {
+                $publicDir = public_path('locales');
+                if (!is_dir($publicDir)) {
+                    @mkdir($publicDir, 0755, true);
+                }
+                if (is_dir($publicDir) && is_writable($publicDir)) {
+                    file_put_contents($publicDir . '/' . $lang->locale . '.json', $jsonContent);
+                }
+            } catch (\Exception $e) {
+                Log::error("buildTranslationsApi: failed to write public/locales: " . $e->getMessage());
+            }
+
+            // -----------------------------------------------------------------
+            // 4. Write to frontend messages folder (for next-intl, optional)
+            // -----------------------------------------------------------------
+            try {
+                $frontendPathEnv = env('FRONTEND_PATH', '../explore-heros-travel-website');
+                $frontendMessagesDir = base_path($frontendPathEnv . '/messages');
+
+                if (is_dir($frontendMessagesDir) && is_writable($frontendMessagesDir)) {
+                    file_put_contents($frontendMessagesDir . '/' . $lang->locale . '.json', $jsonContent);
+                }
+            } catch (\Exception $e) {
+                Log::error("buildTranslationsApi: failed to write frontend messages: " . $e->getMessage());
+            }
+
+            // -----------------------------------------------------------------
+            // Update last_build_at timestamp (wrapped in its own try-catch)
+            // -----------------------------------------------------------------
+            try {
+                $lang->last_build_at = date('Y-m-d H:i:s');
+                $lang->save();
+            } catch (\Exception $e) {
+                // Non-fatal — log and continue; build itself succeeded
+                Log::error("buildTranslationsApi: failed to update last_build_at: " . $e->getMessage());
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Translation file built successfully for {$lang->name}",
+                'file' => $writtenFile ?? ('lang/' . $lang->locale . '.json'),
+                'strings_count' => count($json),
+                'last_build_at' => $lang->last_build_at ?? date('Y-m-d H:i:s'),
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("buildTranslationsApi critical error: " . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
-                'error' => 'Folder resources/lang is not writable'
+                'error' => 'Build failed: ' . $e->getMessage(),
             ], 500);
         }
-
-        $query = Translation::select([
-            'core_translations.*',
-            't.string as origin'
-        ])->where('core_translations.locale', $lang->locale)
-          ->whereRaw("IFNULL(core_translations.string,'') != '' ");
-
-        $query->join('core_translations as t', function ($join) use ($lang) {
-            $join->on('t.id', '=', 'core_translations.parent_id');
-            $join->where('t.locale', 'raw');
-        });
-
-        $json = [];
-        $rows = $query->get();
-        if (!empty($rows)) {
-            foreach ($rows as $row) {
-                $json[$row['origin']] = $row['string'];
-            }
-        }
-
-        // Write to resources/lang folder (backend)
-        try {
-            $myfile = fopen($file, "w");
-            if ($myfile) {
-                fwrite($myfile, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-                fclose($myfile);
-            }
-        } catch (\Exception $e) {
-            // Log error or ignore, but don't crash the request
-            Log::error("Failed to write to resources/lang: " . $e->getMessage());
-        }
-
-        // Also write to public folder for frontend access (legacy/other uses)
-        try {
-            $publicDir = base_path('public/locales');
-            if (!is_dir($publicDir)) {
-                @mkdir($publicDir, 0755, true);
-            }
-
-            if (is_dir($publicDir) && is_writable($publicDir)) {
-                $publicFile = $publicDir . '/' . $lang->locale . '.json';
-                // Check if file exists and is writable, or if doesn't exist and dir is writable
-                if ((!file_exists($publicFile) && is_writable($publicDir)) || (file_exists($publicFile) && is_writable($publicFile))) {
-                    $publicFileHandle = @fopen($publicFile, "w");
-                    if ($publicFileHandle) {
-                        fwrite($publicFileHandle, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-                        fclose($publicFileHandle);
-                    }
-                }
-            }
-        } catch (\Exception $e) {
-            Log::error("Failed to write to public/locales: " . $e->getMessage());
-        }
-
-        // Also write to frontend messages folder (for next-intl)
-        try {
-            $frontendPathEnv = env('FRONTEND_PATH', '../explore-heros-travel-website');
-            $frontendMessagesDir = base_path($frontendPathEnv . '/messages');
-
-            if (is_dir($frontendMessagesDir) && is_writable($frontendMessagesDir)) {
-                $frontendFile = $frontendMessagesDir . '/' . $lang->locale . '.json';
-                if ((!file_exists($frontendFile) && is_writable($frontendMessagesDir)) || (file_exists($frontendFile) && is_writable($frontendFile))) {
-                    $frontendFileHandle = @fopen($frontendFile, "w");
-                    if ($frontendFileHandle) {
-                        fwrite($frontendFileHandle, json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-                        fclose($frontendFileHandle);
-                    }
-                }
-            }
-        } catch (\Exception $e) {
-            Log::error("Failed to write to frontend messages: " . $e->getMessage());
-        }
-
-        // Update last build time
-        $lang->last_build_at = date('Y-m-d H:i:s');
-        $lang->save();
-
-        return response()->json([
-            'success' => true,
-            'message' => "Translation file built successfully for {$lang->name}",
-            'file' => 'resources/lang/' . $lang->locale . '.json',
-            'strings_count' => count($json),
-            'last_build_at' => $lang->last_build_at
-        ]);
     }
 
     /**

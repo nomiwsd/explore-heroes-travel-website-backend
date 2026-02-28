@@ -28,7 +28,7 @@ Route::prefix('module/language')->middleware('auth:sanctum')->group(function () 
 
     // Delete (mapped to bulkEdit or specific delete? Controller bulkEdit handles delete via action='delete')
     // But RESTful delete might expect DELETE method.
-    // LanguageController doesn't have a 'delete' method, it uses bulkEdit mostly? 
+    // LanguageController doesn't have a 'delete' method, it uses bulkEdit mostly?
     // Or users index logic?
     // Let's check bulkEdit logic. It handles delete.
     // Frontend uses: deleteLanguage(id) -> POST bulkEdit (action: delete) ?
@@ -39,10 +39,35 @@ Route::prefix('module/language')->middleware('auth:sanctum')->group(function () 
 // TRANSLATION MANAGEMENT
 // =====================================================
 Route::prefix('module/language/translations')->middleware('auth:sanctum')->group(function () {
+
+    // ------------------------------------------------------------------
+    // FIXED routes MUST come before wildcard /{locale} to avoid conflicts
+    // ------------------------------------------------------------------
+
+    // Scan for new translatable strings
+    Route::post('/scan', [\Modules\Language\Admin\TranslationsController::class, 'scanForStringsApi']);
+
+    // Import translations from JSON file (no locale param version)
+    Route::post('/import', [\Modules\Language\Admin\TranslationsController::class, 'loadTranslateJson']);
+
+    // Get translation groups
+    Route::get('/groups/list', function () {
+        try {
+            $groups = ['general', 'navigation', 'forms', 'validation', 'errors', 'tours', 'destinations', 'booking'];
+            return response()->json($groups);
+        } catch (\Exception $e) {
+            return response()->json([]);
+        }
+    });
+
+    // ------------------------------------------------------------------
+    // WILDCARD single-segment routes
+    // ------------------------------------------------------------------
+
     // Get all translations for a language (paginated with stats)
     Route::get('/{locale}', [\Modules\Language\Admin\TranslationsController::class, 'getTranslationsApi']);
-    
-    // Update translations
+
+    // Update translations (inline legacy handler)
     Route::post('/{locale}', function ($locale, Request $request) {
         try {
             $translations = $request->input('translations', []);
@@ -60,24 +85,24 @@ Route::prefix('module/language/translations')->middleware('auth:sanctum')->group
                     $table->unique(['locale', 'group', 'key']);
                 });
             }
-            
+
             foreach ($translations as $key => $value) {
                 DB::table('bc_translations')->updateOrInsert(
                     ['locale' => $locale, 'group' => $group, 'key' => $key],
                     ['value' => $value, 'updated_at' => now()]
                 );
             }
-            
+
             // Also update JSON file
             $filePath = lang_path($locale . '.json');
             $existingTranslations = [];
             if (file_exists($filePath)) {
                 $existingTranslations = json_decode(file_get_contents($filePath), true) ?? [];
             }
-            
+
             $mergedTranslations = array_merge($existingTranslations, $translations);
             file_put_contents($filePath, json_encode($mergedTranslations, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Translations updated successfully',
@@ -86,38 +111,31 @@ Route::prefix('module/language/translations')->middleware('auth:sanctum')->group
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
-    // Get translation groups
-    Route::get('/groups/list', function () {
-        try {
-            $groups = ['general', 'navigation', 'forms', 'validation', 'errors', 'tours', 'destinations', 'booking'];
-            
-            return response()->json($groups);
-        } catch (\Exception $e) {
-            return response()->json([]);
-        }
-    });
-    
-    // Import translations from file
+
+    // ------------------------------------------------------------------
+    // TWO-SEGMENT routes (locale + action) — safe after single-segment wildcards
+    // ------------------------------------------------------------------
+
+    // Import translations from file (with locale)
     Route::post('/import/{locale}', function ($locale, Request $request) {
         try {
             $file = $request->file('file');
-            
+
             if (!$file) {
                 return response()->json(['error' => 'No file uploaded'], 400);
             }
-            
+
             $content = file_get_contents($file->getRealPath());
             $translations = json_decode($content, true);
-            
+
             if (!$translations) {
                 return response()->json(['error' => 'Invalid JSON file'], 400);
             }
-            
+
             // Save to JSON file
             $filePath = lang_path($locale . '.json');
             file_put_contents($filePath, json_encode($translations, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Translations imported successfully',
@@ -127,18 +145,18 @@ Route::prefix('module/language/translations')->middleware('auth:sanctum')->group
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
     // Export translations
     Route::get('/export/{locale}', function ($locale) {
         try {
             $filePath = lang_path($locale . '.json');
-            
+
             if (!file_exists($filePath)) {
                 return response()->json(['error' => 'Translation file not found'], 404);
             }
-            
+
             $content = file_get_contents($filePath);
-            
+
             return response($content)
                 ->header('Content-Type', 'application/json')
                 ->header('Content-Disposition', 'attachment; filename="' . $locale . '.json"');
@@ -155,10 +173,5 @@ Route::prefix('module/language/translations')->middleware('auth:sanctum')->group
 
     // Get translation stats
     Route::get('/{locale}/stats', [\Modules\Language\Admin\TranslationsController::class, 'getStatsApi']);
-
-    // Scan for new translatable strings
-    Route::post('/scan', [\Modules\Language\Admin\TranslationsController::class, 'scanForStringsApi']);
-
-    // Import translations from JSON file
-    Route::post('/import', [\Modules\Language\Admin\TranslationsController::class, 'loadTranslateJson']);
 });
+
