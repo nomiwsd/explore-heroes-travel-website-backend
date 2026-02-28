@@ -166,8 +166,17 @@
                         'style_custom_css',
                         'style_typo',
                     ]
-                ],
-			];
+                ],                'whatsapp' => [
+                    'id'       => 'whatsapp',
+                    'title'    => __('WhatsApp Settings'),
+                    'position' => 65,
+                    'keys'     => [
+                        'whatsapp_enabled',
+                        'whatsapp_number',
+                        'whatsapp_message',
+                        'whatsapp_position',
+                    ],
+                ],			];
             return apply_filters(Hook::CORE_SETTING_CONFIG,$configs);
 		}
 	}
