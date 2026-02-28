@@ -220,7 +220,8 @@ Route::prefix('destinations')->group(function () {
                     'canonical_url' => $destination->canonical_url,
                     'robots_meta' => $destination->robots_meta,
                     'schema_markup' => $destination->schema_markup,
-                    'tours' => $tours->map(function ($tour) {
+                    'tours' => $tours->map(function ($tour) use ($lang) {
+                        $tourTranslation = $lang ? $tour->translate($lang) : null;
                         // Get image URL with fallbacks: image_id > banner_image_id > first hero_slider image
                         $imageUrl = null;
                         if ($tour->image_id) {
@@ -241,7 +242,7 @@ Route::prefix('destinations')->group(function () {
 
                         return [
                             'id' => $tour->id,
-                            'title' => $tour->title,
+                            'title' => $tourTranslation->title ?? $tour->title,
                             'slug' => $tour->slug,
                             'price' => $tour->price,
                             'sale_price' => $tour->sale_price,
