@@ -410,22 +410,24 @@ Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
 // NEWS CATEGORY MANAGEMENT
 // =====================================================
 Route::prefix('module/news/category')->middleware('auth:sanctum')->group(function () {
-    // Get all categories
+    // Get all categories (supports ?lang= to return translated names)
     Route::get('/', function (Request $request) {
         try {
             $query = NewsCategory::query();
-            
+
             if ($request->has('s') && $request->s) {
                 $query->where('name', 'LIKE', '%' . $request->s . '%');
             }
-            
+
             $categories = $query->withCount('posts')->orderBy('id', 'desc')->get();
-            
+            $lang = $request->query('lang');
+
             return response()->json([
-                'data' => $categories->map(function ($category) {
+                'data' => $categories->map(function ($category) use ($lang) {
+                    $translation = ($lang && !is_default_lang($lang)) ? $category->translate($lang) : null;
                     return [
                         'id' => $category->id,
-                        'name' => $category->name,
+                        'name' => $translation->name ?? $category->name,
                         'slug' => $category->slug,
                         'image_id' => $category->image_id,
                         'status' => $category->status,
@@ -438,58 +440,80 @@ Route::prefix('module/news/category')->middleware('auth:sanctum')->group(functio
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
-    // Get single category
-    Route::get('/edit/{id}', function ($id) {
+
+    // Get single category (supports ?lang= for translation editing)
+    Route::get('/edit/{id}', function (Request $request, $id) {
         try {
             $category = NewsCategory::findOrFail($id);
             $seoMeta = $category->getSeoMeta();
-            
+
+            $lang = $request->query('lang');
+            $translation = null;
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $category->translate($lang);
+            }
+
             return response()->json([
                 'data' => [
                     'id' => $category->id,
-                    'name' => $category->name,
+                    'name' => $translation->name ?? $category->name,
                     'slug' => $category->slug,
-                    'content' => $category->content,
-                    'description' => $category->content, // Alias for frontend
+                    'content' => $translation->content ?? $category->content,
+                    'description' => $translation->content ?? $category->content, // Alias for frontend
                     'image_id' => $category->image_id,
                     'status' => $category->status,
                     'meta_title' => $seoMeta['seo_title'] ?? null,
                     'meta_desc' => $seoMeta['seo_desc'] ?? null,
                 ],
+                'translation' => $translation,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
-    // Store/Update category
+
+    // Store/Update category (supports ?lang= for translation save)
     Route::post('/store/{id?}', function (Request $request, $id = null) {
         try {
+            $lang = $request->query('lang') ?: $request->input('lang');
+            $isTranslation = $lang && !is_default_lang($lang);
+
             if ($id) {
                 $category = NewsCategory::findOrFail($id);
             } else {
                 $category = new NewsCategory();
             }
-            
-            $category->name = $request->input('name');
-            $category->slug = $request->input('slug') ?: Str::slug($request->input('name'));
-            // Frontend sends 'description', backend stores as 'content'
-            $category->content = $request->input('content') ?: $request->input('description');
-            $category->image_id = $request->input('image_id');
-            $category->status = $request->input('status', 'publish');
-            $category->save();
-            
-            // Save SEO meta data
-            if ($request->has('meta_title') || $request->has('meta_desc')) {
-                $seoRequest = new Request([
-                    'seo_title' => $request->input('meta_title'),
-                    'seo_desc' => $request->input('meta_desc'),
-                    'seo_image' => $request->input('image_id'),
-                ]);
-                $category->saveSEO($seoRequest);
+
+            if (!$isTranslation) {
+                $category->name = $request->input('name');
+                $category->slug = $request->input('slug') ?: Str::slug($request->input('name'));
+                // Frontend sends 'description', backend stores as 'content'
+                $category->content = $request->input('content') ?: $request->input('description');
+                $category->image_id = $request->input('image_id');
+                $category->status = $request->input('status', 'publish');
+                $category->save();
+
+                // Save SEO meta data
+                if ($request->has('meta_title') || $request->has('meta_desc')) {
+                    $seoRequest = new Request([
+                        'seo_title' => $request->input('meta_title'),
+                        'seo_desc' => $request->input('meta_desc'),
+                        'seo_image' => $request->input('image_id'),
+                    ]);
+                    $category->saveSEO($seoRequest);
+                }
+
+                // Mirror to default-locale translation row
+                $category->saveTranslation($lang ?: get_main_lang(), false);
+                $message = 'Category saved successfully';
+            } else {
+                if (!$category->id) {
+                    return response()->json(['error' => 'Cannot create translation for non-existing category'], 400);
+                }
+                $category->saveTranslation($lang, false);
+                $message = 'Category translation saved successfully';
             }
-            
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -501,7 +525,7 @@ Route::prefix('module/news/category')->middleware('auth:sanctum')->group(functio
                     'image_id' => $category->image_id,
                     'status' => $category->status,
                 ],
-                'message' => 'Category saved successfully',
+                'message' => $message,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -561,65 +585,91 @@ Route::prefix('module/news/category')->middleware('auth:sanctum')->group(functio
 // NEWS TAG MANAGEMENT
 // =====================================================
 Route::prefix('module/news/tag')->middleware('auth:sanctum')->group(function () {
-    // Get all tags
+    // Get all tags (supports ?lang= to return translated names)
     Route::get('/', function (Request $request) {
         try {
             $query = \Modules\News\Models\Tag::query();
-            
+
             if ($request->has('s') && $request->s) {
                 $query->where('name', 'LIKE', '%' . $request->s . '%');
             }
-            
+
             $tags = $query->orderBy('id', 'desc')->paginate($request->input('limit', 50));
-            
+            $lang = $request->query('lang');
+
             return response()->json([
-                'data' => $tags->map(function ($tag) {
+                'data' => $tags->getCollection()->map(function ($tag) use ($lang) {
+                    $translation = ($lang && !is_default_lang($lang)) ? $tag->translate($lang) : null;
                     return [
                         'id' => $tag->id,
-                        'name' => $tag->name,
+                        'name' => $translation->name ?? $tag->name,
                         'slug' => $tag->slug,
-                        'content' => $tag->content,
+                        'content' => $translation->content ?? $tag->content,
                     ];
-                }),
+                })->all(),
                 'total' => $tags->total(),
+                'current_page' => $tags->currentPage(),
+                'last_page' => $tags->lastPage(),
+                'per_page' => $tags->perPage(),
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
     
-    // Get single tag
-    Route::get('/edit/{id}', function ($id) {
+    // Get single tag (supports ?lang= for translation editing)
+    Route::get('/edit/{id}', function (Request $request, $id) {
         try {
             $tag = \Modules\News\Models\Tag::findOrFail($id);
-            
+
+            $lang = $request->query('lang');
+            $translation = null;
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $tag->translate($lang);
+            }
+
             return response()->json([
                 'data' => [
                     'id' => $tag->id,
-                    'name' => $tag->name,
+                    'name' => $translation->name ?? $tag->name,
                     'slug' => $tag->slug,
-                    'content' => $tag->content,
+                    'content' => $translation->content ?? $tag->content,
                 ],
+                'translation' => $translation,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
-    // Store/Update tag
+
+    // Store/Update tag (supports ?lang= for translation save)
     Route::post('/store/{id?}', function (Request $request, $id = null) {
         try {
+            $lang = $request->query('lang') ?: $request->input('lang');
+            $isTranslation = $lang && !is_default_lang($lang);
+
             if ($id) {
                 $tag = \Modules\News\Models\Tag::findOrFail($id);
             } else {
                 $tag = new \Modules\News\Models\Tag();
             }
-            
-            $tag->name = $request->input('name');
-            $tag->slug = $request->input('slug') ?: Str::slug($request->input('name'));
-            $tag->content = $request->input('content');
-            $tag->save();
-            
+
+            if (!$isTranslation) {
+                $tag->name = $request->input('name');
+                $tag->slug = $request->input('slug') ?: Str::slug($request->input('name'));
+                $tag->content = $request->input('content');
+                $tag->save();
+                // Mirror to default-locale translation row as well
+                $tag->saveTranslation($lang ?: get_main_lang(), false);
+                $message = 'Tag saved successfully';
+            } else {
+                if (!$tag->id) {
+                    return response()->json(['error' => 'Cannot create translation for non-existing tag'], 400);
+                }
+                $tag->saveTranslation($lang, false);
+                $message = 'Tag translation saved successfully';
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -628,7 +678,7 @@ Route::prefix('module/news/tag')->middleware('auth:sanctum')->group(function () 
                     'slug' => $tag->slug,
                     'content' => $tag->content,
                 ],
-                'message' => 'Tag saved successfully',
+                'message' => $message,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);

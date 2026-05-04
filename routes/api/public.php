@@ -25,6 +25,8 @@ Route::prefix('menus')->group(function () {
     // Get menu by location (header, footer, etc.)
     Route::get('/location/{location}', function ($location) {
         try {
+            $lang = request()->query('lang');
+
             // Try multiple query approaches for different MySQL versions
             $menu = Menu::where('status', 'publish')
                 ->where(function($q) use ($location) {
@@ -43,10 +45,26 @@ Route::prefix('menus')->group(function () {
                 return response()->json(null);
             }
 
-            // Parse items from JSON string
+            // Parse items — use translation if lang is provided and not default
+            $defaultLang = get_main_lang();
             $items = $menu->items_json ?? [];
 
-            Log::info("Menu found for location: $location, items count: " . count($items));
+            if ($lang && $lang !== $defaultLang) {
+                $translation = \Modules\Core\Models\MenuTranslation::where('origin_id', $menu->id)
+                    ->where('locale', $lang)
+                    ->first();
+
+                if ($translation && !empty($translation->items)) {
+                    $translatedItems = is_string($translation->items)
+                        ? json_decode($translation->items, true)
+                        : $translation->items;
+                    if (!empty($translatedItems)) {
+                        $items = $menu->filterMenuItemsPublic($translatedItems);
+                    }
+                }
+            }
+
+            Log::info("Menu found for location: $location, lang: " . ($lang ?? 'default') . ", items count: " . count($items));
 
             return response()->json([
                 'id' => $menu->id,
@@ -1176,15 +1194,70 @@ Route::prefix('news')->group(function () {
         }
     });
 
-    // Get public categories
-    Route::get('/categories', function () {
+    // Get public categories (supports ?lang= for translated names)
+    Route::get('/categories', function (Request $request) {
         try {
             $categories = \Modules\News\Models\NewsCategory::where('status', 'publish')
                 ->orderBy('name')
                 ->get();
-            return response()->json(['data' => $categories]);
+
+            $lang = $request->query('lang');
+            $data = $categories->map(function ($cat) use ($lang) {
+                $translation = ($lang && !is_default_lang($lang)) ? $cat->translate($lang) : null;
+                return [
+                    'id' => $cat->id,
+                    'name' => $translation->name ?? $cat->name,
+                    'slug' => $cat->slug,
+                    'parent_id' => $cat->parent_id,
+                    'image_id' => $cat->image_id,
+                    'status' => $cat->status,
+                ];
+            });
+
+            return response()->json(['data' => $data]);
         } catch (\Exception $e) {
             return response()->json(['data' => []]);
+        }
+    });
+
+    // Get public tags (supports ?lang= for translated names; only tags used by published posts)
+    Route::get('/tags', function (Request $request) {
+        try {
+            $lang = $request->query('lang');
+            $limit = (int) $request->query('limit', 50);
+            $search = $request->query('s');
+
+            $query = \Modules\News\Models\Tag::query()
+                ->whereIn('id', function ($q) {
+                    $q->select('tag_id')
+                        ->from('core_news_tag')
+                        ->whereNull('deleted_at')
+                        ->whereIn('news_id', function ($q2) {
+                            $q2->select('id')
+                                ->from('core_news')
+                                ->where('status', 'publish')
+                                ->whereNull('deleted_at');
+                        });
+                });
+
+            if ($search) {
+                $query->where('name', 'LIKE', '%' . $search . '%');
+            }
+
+            $tags = $query->orderBy('name')->limit($limit)->get();
+
+            $data = $tags->map(function ($tag) use ($lang) {
+                $translation = ($lang && !is_default_lang($lang)) ? $tag->translate($lang) : null;
+                return [
+                    'id' => $tag->id,
+                    'name' => $translation->name ?? $tag->name,
+                    'slug' => $tag->slug,
+                ];
+            });
+
+            return response()->json(['data' => $data]);
+        } catch (\Exception $e) {
+            return response()->json(['data' => [], 'error' => $e->getMessage()]);
         }
     });
 
