@@ -135,4 +135,39 @@ trait HasTranslations
         return $res;
     }
 
+    /**
+     * Force save translation row regardless of `site_enable_multi_lang` setting.
+     * Use when you want translation features to work without depending on the global gate.
+     */
+    public function forceSaveTranslation($locale, array $data = null)
+    {
+        $class = $this->getTranslationModelName();
+        $fillable = (new $class)->getFillable();
+        $payload = $data !== null
+            ? collect($data)->only($fillable)->toArray()
+            : collect(request()->input())->only($fillable)->toArray();
+
+        return $class::updateOrCreate(
+            [
+                'origin_id' => $this->getKey(),
+                'locale' => $locale,
+            ],
+            $payload
+        );
+    }
+
+    /**
+     * Force fetch translation row regardless of `site_enable_multi_lang` setting.
+     * Returns the translation model if found, otherwise null.
+     */
+    public function forceTranslate($locale)
+    {
+        if (empty($locale)) return null;
+        $class = $this->getTranslationModelName();
+        return $class::query()->where([
+            'origin_id' => $this->getKey(),
+            'locale' => $locale,
+        ])->first();
+    }
+
 }

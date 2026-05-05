@@ -69,7 +69,7 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
             $lang = $request->query('lang');
             $translation = null;
             if ($lang && !is_default_lang($lang)) {
-                $translation = $page->translate($lang);
+                $translation = $page->forceTranslate($lang);
             }
 
             // Resolve Image URLs
@@ -227,8 +227,8 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
                 file_put_contents(storage_path('logs/page_debug.log'), "SKIPPED MAIN TABLE SAVE\n", FILE_APPEND);
             }
 
-            // Save translation (this uses request()->input() and filters by PageTranslation fillables)
-            $res = $page->saveTranslation($lang ?: get_main_lang(), true);
+            // Save translation (bypass multi-lang gate to ensure translations always persist)
+            $res = $page->forceSaveTranslation($lang ?: get_main_lang(), $request->input());
 
             return response()->json([
                 'success' => true,

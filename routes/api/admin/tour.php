@@ -64,7 +64,7 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
             $themes = $query->orderBy('name')->get();
 
             $transformed = $themes->map(function ($theme) use ($lang) {
-                $translation = ($lang && !is_default_lang($lang)) ? $theme->translate($lang) : null;
+                $translation = ($lang && !is_default_lang($lang)) ? $theme->forceTranslate($lang) : null;
                 return [
                     'id' => $theme->id,
                     'name' => $translation->name ?? $theme->name,
@@ -93,7 +93,7 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
             $lang = $request->query('lang');
             $translation = null;
             if ($lang && !is_default_lang($lang)) {
-                $translation = $theme->translate($lang);
+                $translation = $theme->forceTranslate($lang);
             }
 
             return response()->json([
@@ -135,13 +135,13 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
                 $theme->image_id = $request->input('image_id');
                 $theme->attr_id = $attrId;
                 $theme->save();
-                $theme->saveTranslation($lang ?: get_main_lang(), false);
+                $theme->forceSaveTranslation($lang ?: get_main_lang(), $request->input());
                 $message = 'Theme saved successfully';
             } else {
                 if (!$theme->id) {
                     return response()->json(['error' => 'Cannot create translation for non-existing theme'], 400);
                 }
-                $theme->saveTranslation($lang, false);
+                $theme->forceSaveTranslation($lang, $request->input());
                 $message = 'Theme translation saved successfully';
             }
 
@@ -217,7 +217,7 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
 
             $lang = $request->query('lang');
             $categories = $rows->map(function ($cat) use ($lang) {
-                $translation = ($lang && !is_default_lang($lang)) ? $cat->translate($lang) : null;
+                $translation = ($lang && !is_default_lang($lang)) ? $cat->forceTranslate($lang) : null;
                 return [
                     'id' => $cat->id,
                     'name' => $translation->name ?? $cat->name,
@@ -241,7 +241,7 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
             $lang = $request->query('lang');
             $translation = null;
             if ($lang && !is_default_lang($lang)) {
-                $translation = $category->translate($lang);
+                $translation = $category->forceTranslate($lang);
             }
 
             return response()->json([
@@ -275,13 +275,13 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
                 $category->fill($request->only(['name', 'slug', 'status', 'parent_id']));
                 $category->save();
                 // Mirror to default-locale translation row
-                $category->saveTranslation($lang ?: get_main_lang(), false);
+                $category->forceSaveTranslation($lang ?: get_main_lang(), $request->input());
                 $message = 'Category saved successfully';
             } else {
                 if (!$category->id) {
                     return response()->json(['error' => 'Cannot create translation for non-existing category'], 400);
                 }
-                $category->saveTranslation($lang, false);
+                $category->forceSaveTranslation($lang, $request->input());
                 $message = 'Category translation saved successfully';
             }
 
@@ -394,7 +394,7 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
             $lang = $request->query('lang');
             $translation = null;
             if ($lang && !is_default_lang($lang)) {
-                $translation = $tour->translate($lang);
+                $translation = $tour->forceTranslate($lang);
             }
 
             $toArray = fn($value) => is_array($value) ? $value : (
@@ -545,15 +545,15 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
                 $tour->create_user = $request->user()->id ?? 1;
             }
 
-            // Use saveOriginOrTranslation for proper translation handling
+            // Use forceSaveTranslation to bypass multi-lang gate
             if ($isTranslation) {
                 // For translations, don't save the main tour, only save translation
-                $tour->saveTranslation($lang, true);
+                $tour->forceSaveTranslation($lang, $request->input());
                 $message = 'Translation saved successfully';
             } else {
                 // For default language, save both main tour and translation
                 $tour->save();
-                $tour->saveTranslation($lang ?: 'en', true);
+                $tour->forceSaveTranslation($lang ?: 'en', $request->input());
                 $message = $id ? 'Tour updated successfully' : 'Tour created successfully';
             }
             

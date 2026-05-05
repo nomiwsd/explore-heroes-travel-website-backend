@@ -144,7 +144,7 @@ Route::prefix('destinations')->group(function () {
 
             return response()->json([
                 'data' => $destinations->map(function ($dest) use ($lang) {
-                    $translation = $lang ? $dest->translate($lang) : null;
+                    $translation = $lang ? $dest->forceTranslate($lang) : null;
                     return [
                         'id' => $dest->id,
                         'name' => $translation->name ?? $dest->name,
@@ -180,7 +180,7 @@ Route::prefix('destinations')->group(function () {
             }
 
             $lang = $request->query('lang');
-            $translation = $destination->translate($lang);
+            $translation = $destination->forceTranslate($lang);
 
             $seo = $destination->getSeoMeta();
 
@@ -239,7 +239,7 @@ Route::prefix('destinations')->group(function () {
                     'robots_meta' => $destination->robots_meta,
                     'schema_markup' => $destination->schema_markup,
                     'tours' => $tours->map(function ($tour) use ($lang) {
-                        $tourTranslation = $lang ? $tour->translate($lang) : null;
+                        $tourTranslation = $lang ? $tour->forceTranslate($lang) : null;
                         // Get image URL with fallbacks: image_id > banner_image_id > first hero_slider image
                         $imageUrl = null;
                         if ($tour->image_id) {
@@ -289,7 +289,7 @@ Route::get('/tour-categories', function (Request $request) {
             ->get(['id', 'name', 'slug', 'parent_id']);
 
         $data = $rows->map(function ($cat) use ($lang) {
-            $translation = ($lang && !is_default_lang($lang)) ? $cat->translate($lang) : null;
+            $translation = ($lang && !is_default_lang($lang)) ? $cat->forceTranslate($lang) : null;
             return [
                 'id' => $cat->id,
                 'name' => $translation->name ?? $cat->name,
@@ -320,7 +320,7 @@ $publicTermsByAttrSlug = function ($attrSlug, $lang = null) {
         ->get();
 
     return $terms->map(function ($term) use ($lang) {
-        $translation = ($lang && !is_default_lang($lang)) ? $term->translate($lang) : null;
+        $translation = ($lang && !is_default_lang($lang)) ? $term->forceTranslate($lang) : null;
         return [
             'id' => $term->id,
             'name' => $translation->name ?? $term->name,
@@ -452,7 +452,7 @@ Route::prefix('tours')->group(function () {
 
             return response()->json([
                 'data' => $tours->map(function ($tour) use ($lang) {
-                    $translation = $lang ? $tour->translate($lang) : null;
+                    $translation = $lang ? $tour->forceTranslate($lang) : null;
                     // Fetch categories (translated)
                     $categories = collect([]);
                      if (!empty($tour->category_ids)) {
@@ -460,7 +460,7 @@ Route::prefix('tours')->group(function () {
                          if (is_array($catIds) && count($catIds) > 0) {
                              $categories = \Modules\Tour\Models\TourCategory::whereIn('id', $catIds)->get(['id', 'name', 'slug'])
                                  ->map(function ($c) use ($lang) {
-                                     $tr = ($lang && !is_default_lang($lang)) ? $c->translate($lang) : null;
+                                     $tr = ($lang && !is_default_lang($lang)) ? $c->forceTranslate($lang) : null;
                                      return [
                                          'id' => $c->id,
                                          'name' => $tr->name ?? $c->name,
@@ -477,7 +477,7 @@ Route::prefix('tours')->group(function () {
                          if (is_array($themeIds) && count($themeIds) > 0) {
                             $themes = \Modules\Core\Models\Terms::whereIn('id', $themeIds)->get(['id', 'name', 'slug', 'icon'])
                                 ->map(function ($t) use ($lang) {
-                                    $tr = ($lang && !is_default_lang($lang)) ? $t->translate($lang) : null;
+                                    $tr = ($lang && !is_default_lang($lang)) ? $t->forceTranslate($lang) : null;
                                     return [
                                         'id' => $t->id,
                                         'name' => $tr->name ?? $t->name,
@@ -561,7 +561,7 @@ Route::prefix('tours')->group(function () {
             $lang = $request->query('lang');
             $translation = null;
             if ($lang && !is_default_lang($lang)) {
-                $translation = $tour->translate($lang);
+                $translation = $tour->forceTranslate($lang);
             }
 
             // Get translatable fields (use translation if available, else main tour)
@@ -642,7 +642,7 @@ Route::prefix('tours')->group(function () {
                 if (is_array($catIds) && count($catIds) > 0) {
                     $categories = \Modules\Tour\Models\TourCategory::whereIn('id', $catIds)->get(['id', 'name', 'slug'])
                         ->map(function ($c) use ($lang) {
-                            $tr = ($lang && !is_default_lang($lang)) ? $c->translate($lang) : null;
+                            $tr = ($lang && !is_default_lang($lang)) ? $c->forceTranslate($lang) : null;
                             return [
                                 'id' => $c->id,
                                 'name' => $tr->name ?? $c->name,
@@ -663,7 +663,7 @@ Route::prefix('tours')->group(function () {
             if (!empty($tourThemesIds) && is_array($tourThemesIds)) {
                 $tourThemes = \Modules\Core\Models\Terms::whereIn('id', $tourThemesIds)->get(['id', 'name', 'slug', 'icon', 'image_id'])
                     ->map(function ($t) use ($lang) {
-                        $tr = ($lang && !is_default_lang($lang)) ? $t->translate($lang) : null;
+                        $tr = ($lang && !is_default_lang($lang)) ? $t->forceTranslate($lang) : null;
                         return [
                             'id' => $t->id,
                             'name' => $tr->name ?? $t->name,
@@ -1122,7 +1122,7 @@ Route::prefix('news')->group(function () {
                 foreach ($pivot as $row) {
                     $tag = $tagRows->get($row->tag_id);
                     if (!$tag) continue;
-                    $tTrans = ($lang && !is_default_lang($lang)) ? $tag->translate($lang) : null;
+                    $tTrans = ($lang && !is_default_lang($lang)) ? $tag->forceTranslate($lang) : null;
                     $tagsByPost[$row->news_id][] = [
                         'id' => $tag->id,
                         'name' => $tTrans->name ?? $tag->name,
@@ -1133,7 +1133,7 @@ Route::prefix('news')->group(function () {
 
             // Transform data with images and author
             $data = collect($posts->items())->map(function ($post) use ($lang, $tagsByPost) {
-                $translation = $lang ? $post->translate($lang) : null;
+                $translation = $lang ? $post->forceTranslate($lang) : null;
                 // Get author info
                 $author = null;
                 if ($post->create_user) {
@@ -1169,7 +1169,7 @@ Route::prefix('news')->group(function () {
                 if ($post->cat_id) {
                     $cat = \Modules\News\Models\NewsCategory::find($post->cat_id);
                     if ($cat) {
-                        $catTrans = ($lang && !is_default_lang($lang)) ? $cat->translate($lang) : null;
+                        $catTrans = ($lang && !is_default_lang($lang)) ? $cat->forceTranslate($lang) : null;
                         $categoryData = [
                             'id' => $cat->id,
                             'name' => $catTrans->name ?? $cat->name,
@@ -1237,7 +1237,7 @@ Route::prefix('news')->group(function () {
                 foreach ($pivot as $row) {
                     $tag = $tagRows->get($row->tag_id);
                     if (!$tag) continue;
-                    $tTrans = ($lang && !is_default_lang($lang)) ? $tag->translate($lang) : null;
+                    $tTrans = ($lang && !is_default_lang($lang)) ? $tag->forceTranslate($lang) : null;
                     $tagsByPost[$row->news_id][] = [
                         'id' => $tag->id,
                         'name' => $tTrans->name ?? $tag->name,
@@ -1247,7 +1247,7 @@ Route::prefix('news')->group(function () {
             }
 
             $data = $posts->map(function ($post) use ($lang, $tagsByPost) {
-                $translation = $lang ? $post->translate($lang) : null;
+                $translation = $lang ? $post->forceTranslate($lang) : null;
                 // Get author info
                 $author = null;
                 if ($post->create_user) {
@@ -1283,7 +1283,7 @@ Route::prefix('news')->group(function () {
                 if ($post->cat_id) {
                     $cat = \Modules\News\Models\NewsCategory::find($post->cat_id);
                     if ($cat) {
-                        $catTrans = ($lang && !is_default_lang($lang)) ? $cat->translate($lang) : null;
+                        $catTrans = ($lang && !is_default_lang($lang)) ? $cat->forceTranslate($lang) : null;
                         $categoryData = [
                             'id' => $cat->id,
                             'name' => $catTrans->name ?? $cat->name,
@@ -1325,7 +1325,7 @@ Route::prefix('news')->group(function () {
 
             $lang = $request->query('lang');
             $data = $categories->map(function ($cat) use ($lang) {
-                $translation = ($lang && !is_default_lang($lang)) ? $cat->translate($lang) : null;
+                $translation = ($lang && !is_default_lang($lang)) ? $cat->forceTranslate($lang) : null;
                 return [
                     'id' => $cat->id,
                     'name' => $translation->name ?? $cat->name,
@@ -1369,7 +1369,7 @@ Route::prefix('news')->group(function () {
             $tags = $query->orderBy('name')->limit($limit)->get();
 
             $data = $tags->map(function ($tag) use ($lang) {
-                $translation = ($lang && !is_default_lang($lang)) ? $tag->translate($lang) : null;
+                $translation = ($lang && !is_default_lang($lang)) ? $tag->forceTranslate($lang) : null;
                 return [
                     'id' => $tag->id,
                     'name' => $translation->name ?? $tag->name,
@@ -1392,7 +1392,7 @@ Route::prefix('news')->group(function () {
                 ->get(['id', 'name', 'slug']);
 
             $data = $rows->map(function ($loc) use ($lang) {
-                $translation = ($lang && !is_default_lang($lang)) ? $loc->translate($lang) : null;
+                $translation = ($lang && !is_default_lang($lang)) ? $loc->forceTranslate($lang) : null;
                 return [
                     'id' => $loc->id,
                     'name' => $translation->name ?? $loc->name,
@@ -1422,7 +1422,7 @@ Route::prefix('news')->group(function () {
             $lang = $request->query('lang');
             $translation = null;
             if ($lang && !is_default_lang($lang)) {
-                $translation = $post->translate($lang);
+                $translation = $post->forceTranslate($lang);
             }
 
             // Get category (translated)
@@ -1430,7 +1430,7 @@ Route::prefix('news')->group(function () {
             if ($post->cat_id) {
                 $cat = \Modules\News\Models\NewsCategory::find($post->cat_id);
                 if ($cat) {
-                    $catTranslation = ($lang && !is_default_lang($lang)) ? $cat->translate($lang) : null;
+                    $catTranslation = ($lang && !is_default_lang($lang)) ? $cat->forceTranslate($lang) : null;
                     $category = [
                         'id' => $cat->id,
                         'name' => $catTranslation->name ?? $cat->name,
@@ -1449,7 +1449,7 @@ Route::prefix('news')->group(function () {
             if (!empty($tagIds)) {
                 $tagRows = \Modules\News\Models\Tag::whereIn('id', $tagIds)->get();
                 $tags = $tagRows->map(function ($t) use ($lang) {
-                    $tTrans = ($lang && !is_default_lang($lang)) ? $t->translate($lang) : null;
+                    $tTrans = ($lang && !is_default_lang($lang)) ? $t->forceTranslate($lang) : null;
                     return [
                         'id' => $t->id,
                         'name' => $tTrans->name ?? $t->name,
@@ -1603,7 +1603,7 @@ Route::prefix('pages')->group(function () {
                 'data' => $pages->map(function ($page) use ($needTranslation, $lang) {
                     $title = $page->title;
                     if ($needTranslation) {
-                        $translation = $page->translate($lang);
+                        $translation = $page->forceTranslate($lang);
                         if ($translation && $translation->title) {
                             $title = $translation->title;
                         }
@@ -1645,7 +1645,7 @@ Route::prefix('pages')->group(function () {
             // Handle Translations
             $lang = $request->query('lang');
             if ($lang && !is_default_lang($lang)) {
-                $translation = $page->translate($lang);
+                $translation = $page->forceTranslate($lang);
                 if ($translation) {
                     $pageData['title'] = $translation->title ?? $pageData['title'];
                     $pageData['content'] = $translation->content ?? $pageData['content'];
@@ -1680,7 +1680,7 @@ Route::prefix('pages')->group(function () {
             // Handle Translations
             $lang = $request->query('lang');
             if ($lang && !is_default_lang($lang)) {
-                $translation = $page->translate($lang);
+                $translation = $page->forceTranslate($lang);
                 if ($translation) {
                     $pageData['title'] = $translation->title ?? $pageData['title'];
                     $pageData['content'] = $translation->content ?? $pageData['content'];

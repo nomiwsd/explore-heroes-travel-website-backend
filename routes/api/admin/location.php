@@ -38,7 +38,7 @@ Route::prefix('module/location')->middleware('auth:sanctum')->group(function () 
                     $imageUrl = $url ?: null;
                 }
 
-                $translation = ($lang && !is_default_lang($lang)) ? $loc->translate($lang) : null;
+                $translation = ($lang && !is_default_lang($lang)) ? $loc->forceTranslate($lang) : null;
 
                 return [
                     'id' => $loc->id,
@@ -84,7 +84,7 @@ Route::prefix('module/location')->middleware('auth:sanctum')->group(function () 
             $lang = $request->query('lang');
             $translation = null;
             if ($lang && !is_default_lang($lang)) {
-                $translation = $loc->translate($lang);
+                $translation = $loc->forceTranslate($lang);
             }
 
             // Get image URLs - ensure null if not found
@@ -173,12 +173,12 @@ Route::prefix('module/location')->middleware('auth:sanctum')->group(function () 
 
             if ($isTranslation) {
                 // For translations, don't save the main model, only save translation
-                $loc->saveTranslation($lang, true);
+                $loc->forceSaveTranslation($lang, $request->input());
                 $message = 'Translation saved successfully';
             } else {
                 // For default language, save both main model and translation
                 $loc->save();
-                $loc->saveTranslation($lang ?: 'en', true);
+                $loc->forceSaveTranslation($lang ?: 'en', $request->input());
 
                 // Save tours only for main language/record
                 $tours = $request->input('assigned_tour_ids');
