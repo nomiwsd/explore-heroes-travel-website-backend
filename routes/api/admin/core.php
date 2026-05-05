@@ -48,44 +48,77 @@ Route::prefix('module/core/menu')->group(function () {
         }
     });
 
-    // Get single menu
-    Route::get('/edit/{id}', function ($id) {
+    // Get single menu (?lang= for reading translation)
+    Route::get('/edit/{id}', function (Request $request, $id) {
         try {
             $menu = Menu::findOrFail($id);
+
+            $lang = $request->query('lang');
+            $translation = null;
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $menu->forceTranslate($lang);
+            }
+
+            // Items: use translation items if available, else origin items
+            $items = $translation && $translation->items
+                ? (is_string($translation->items) ? json_decode($translation->items, true) : $translation->items)
+                : $menu->items_json;
 
             return response()->json([
                 'data' => [
                     'id' => $menu->id,
-                    'name' => $menu->name,
-                    'items' => $menu->items_json,
+                    'name' => $menu->name, // name is not translated (it's an internal identifier)
+                    'items' => $items,
                     'locations' => $menu->locations,
                     'status' => $menu->status,
                 ],
+                'translation' => $translation,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
 
-    // Store/Update menu
+    // Store/Update menu (?lang= or body.lang for translation save)
     Route::middleware('auth:sanctum')->post('/store/{id?}', function (Request $request, $id = null) {
         try {
             $id = $id ? $id : $request->input('id');
+            $lang = $request->query('lang') ?: $request->input('lang');
+            $isTranslation = $lang && !is_default_lang($lang);
+
             if ($id) {
                 $menu = Menu::findOrFail($id);
             } else {
+                if ($isTranslation) {
+                    return response()->json(['error' => 'Cannot create translation for non-existing menu'], 400);
+                }
                 $menu = new Menu();
             }
 
-            $menu->name = $request->input('name');
-            $menu->items = $request->input('items');
-            $menu->locations = $request->input('locations', []);
-            $menu->status = $request->input('status', 'publish');
-            $menu->save();
+            if (!$isTranslation) {
+                // Default language: save origin
+                $menu->name = $request->input('name');
+                $menu->items = $request->input('items');
+                $menu->locations = $request->input('locations', []);
+                $menu->status = $request->input('status', 'publish');
+                $menu->save();
+                // Mirror to default-locale translation row (so future reads work uniformly)
+                $menu->forceSaveTranslation($lang ?: get_main_lang(), [
+                    'items' => $request->input('items'),
+                ]);
+                $message = 'Menu saved successfully';
+            } else {
+                // Non-default language: save ONLY translation, do NOT touch origin
+                $menu->forceSaveTranslation($lang, [
+                    'items' => $request->input('items'),
+                ]);
+                $message = 'Menu translation saved successfully';
+            }
 
             return response()->json([
                 'success' => true,
                 'data' => ['id' => $menu->id],
+                'message' => $message,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
