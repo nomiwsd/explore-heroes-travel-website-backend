@@ -628,6 +628,25 @@ class TranslationsController extends AdminController
             }
 
             // -----------------------------------------------------------------
+            // 5. Write to FRONTEND public/locales/ (used by t() at runtime)
+            // -----------------------------------------------------------------
+            try {
+                $frontendPathEnv = env('FRONTEND_PATH', '../explore-heros-travel-website');
+                $frontendPublicLocalesDir = base_path($frontendPathEnv . '/public/locales');
+
+                if (!is_dir($frontendPublicLocalesDir)) {
+                    @mkdir($frontendPublicLocalesDir, 0755, true);
+                }
+                if (is_dir($frontendPublicLocalesDir) && is_writable($frontendPublicLocalesDir)) {
+                    file_put_contents($frontendPublicLocalesDir . '/' . $lang->locale . '.json', $jsonContent);
+                } else {
+                    Log::warning("buildTranslationsApi: frontend public/locales not writable: {$frontendPublicLocalesDir}");
+                }
+            } catch (\Exception $e) {
+                Log::error("buildTranslationsApi: failed to write frontend public/locales: " . $e->getMessage());
+            }
+
+            // -----------------------------------------------------------------
             // Update last_build_at timestamp (wrapped in its own try-catch)
             // -----------------------------------------------------------------
             try {
