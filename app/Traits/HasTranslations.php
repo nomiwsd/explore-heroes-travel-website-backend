@@ -147,13 +147,30 @@ trait HasTranslations
             ? collect($data)->only($fillable)->toArray()
             : collect(request()->input())->only($fillable)->toArray();
 
-        return $class::updateOrCreate(
+        \Illuminate\Support\Facades\Log::info('[forceSaveTranslation] called', [
+            'model' => get_class($this),
+            'origin_id' => $this->getKey(),
+            'locale' => $locale,
+            'translation_class' => $class,
+            'fillable' => $fillable,
+            'payload' => $payload,
+            'request_input_keys' => array_keys(request()->input()),
+        ]);
+
+        $translation = $class::updateOrCreate(
             [
                 'origin_id' => $this->getKey(),
                 'locale' => $locale,
             ],
             $payload
         );
+
+        \Illuminate\Support\Facades\Log::info('[forceSaveTranslation] saved', [
+            'translation_id' => $translation->id ?? null,
+            'translation_data' => $translation->toArray(),
+        ]);
+
+        return $translation;
     }
 
     /**
@@ -164,10 +181,20 @@ trait HasTranslations
     {
         if (empty($locale)) return null;
         $class = $this->getTranslationModelName();
-        return $class::query()->where([
+        $found = $class::query()->where([
             'origin_id' => $this->getKey(),
             'locale' => $locale,
         ])->first();
+
+        \Illuminate\Support\Facades\Log::info('[forceTranslate] lookup', [
+            'model' => get_class($this),
+            'origin_id' => $this->getKey(),
+            'locale' => $locale,
+            'translation_class' => $class,
+            'found' => $found ? $found->toArray() : null,
+        ]);
+
+        return $found;
     }
 
 }
