@@ -528,6 +528,24 @@ Route::prefix('module/news/category')->middleware('auth:sanctum')->group(functio
                 ? $category->forceTranslate($lang)
                 : null;
 
+            // Direct DB-level diagnostic
+            $debugDb = null;
+            if ($lang && !is_default_lang($lang)) {
+                $rawRows = \DB::table('core_news_category_translations')
+                    ->where('origin_id', $category->id)
+                    ->get()->toArray();
+                $debugDb = [
+                    'site_locale_setting' => setting_item('site_locale'),
+                    'request_lang' => $lang,
+                    'is_default_lang_result' => is_default_lang($lang),
+                    'translation_class' => $category->getTranslationModelName(),
+                    'rows_in_db_for_origin' => $rawRows,
+                    'saved_translation_object' => isset($savedTranslation) && $savedTranslation
+                        ? ['id' => $savedTranslation->id ?? null, 'data' => $savedTranslation->toArray()]
+                        : null,
+                ];
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -541,6 +559,7 @@ Route::prefix('module/news/category')->middleware('auth:sanctum')->group(functio
                 ],
                 'translation_saved' => $confirmTranslation ? $confirmTranslation->toArray() : null,
                 'origin_name' => $category->name,
+                'debug' => $debugDb,
                 'message' => $message,
             ]);
         } catch (\Exception $e) {
