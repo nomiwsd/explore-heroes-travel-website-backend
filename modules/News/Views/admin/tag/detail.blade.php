@@ -1,6 +1,6 @@
 @extends('admin.layouts.app')
 @section('content')
-    <form action="{{route('news.admin.tag.store',['id'=>$row->id])}}" method="post">
+    <form action="{{route('news.admin.tag.store',['id'=>($row->id) ? $row->id : '-1','lang'=>request()->query('lang')])}}" method="post">
         @csrf
         <div class="container">
             <div class="d-flex justify-content-between mb20">

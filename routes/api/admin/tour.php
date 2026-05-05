@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Modules\Tour\Models\Tour;
 use Modules\Tour\Models\TourCategory;
+use Modules\Core\Models\Terms;
 
 Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
     
@@ -34,40 +35,39 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
         }
     });
 
-    // Get tour themes
-    Route::get('/themes', function () {
+    // Helper: ensure 'travel-styles' attribute exists, return its id
+    $resolveTravelStylesAttrId = function () {
+        $row = DB::table('bc_attrs')
+            ->where('service', 'tour')
+            ->where('slug', 'travel-styles')
+            ->first();
+        if ($row) return $row->id;
+        return DB::table('bc_attrs')->insertGetId([
+            'name' => 'Travel Styles',
+            'slug' => 'travel-styles',
+            'service' => 'tour',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    };
+
+    // Get tour themes (admin: ?lang= for translated names, ?s= search)
+    Route::get('/themes', function (Request $request) use ($resolveTravelStylesAttrId) {
         try {
-            // Get or create the travel-styles attribute
-            $travelStylesAttr = DB::table('bc_attrs')
-                ->where('service', 'tour')
-                ->where('slug', 'travel-styles')
-                ->first();
-            
-            if (!$travelStylesAttr) {
-                // Create the attribute if it doesn't exist
-                $attrId = DB::table('bc_attrs')->insertGetId([
-                    'name' => 'Travel Styles',
-                    'slug' => 'travel-styles',
-                    'service' => 'tour',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-            } else {
-                $attrId = $travelStylesAttr->id;
+            $attrId = $resolveTravelStylesAttrId();
+            $lang = $request->query('lang');
+
+            $query = Terms::query()->where('attr_id', $attrId);
+            if ($s = $request->query('s')) {
+                $query->where('name', 'LIKE', '%' . $s . '%');
             }
-            
-            $themes = DB::table('bc_terms')
-                ->where('attr_id', $attrId)
-                ->whereNull('deleted_at')
-                ->select('id', 'name', 'slug', 'icon', 'image_id', 'attr_id', 'created_at')
-                ->orderBy('name')
-                ->get();
-            
-            // Transform themes to include image_url
-            $transformedThemes = $themes->map(function ($theme) {
+            $themes = $query->orderBy('name')->get();
+
+            $transformed = $themes->map(function ($theme) use ($lang) {
+                $translation = ($lang && !is_default_lang($lang)) ? $theme->translate($lang) : null;
                 return [
                     'id' => $theme->id,
-                    'name' => $theme->name,
+                    'name' => $translation->name ?? $theme->name,
                     'slug' => $theme->slug,
                     'icon' => $theme->icon,
                     'image_id' => $theme->image_id,
@@ -76,9 +76,9 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
                     'created_at' => $theme->created_at,
                 ];
             });
-            
+
             return response()->json([
-                'data' => $transformedThemes,
+                'data' => $transformed,
                 'attr_id' => $attrId,
             ]);
         } catch (\Exception $e) {
@@ -86,47 +86,69 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
         }
     });
 
-    // Store/Update tour theme
-    Route::post('/themes/store/{id?}', function (Request $request, $id = null) {
+    // Get single theme for editing (?lang= for translation row)
+    Route::get('/themes/edit/{id}', function (Request $request, $id) {
         try {
-            // Get the attr_id
-            $travelStylesAttr = DB::table('bc_attrs')
-                ->where('service', 'tour')
-                ->where('slug', 'travel-styles')
-                ->first();
-            
-            if (!$travelStylesAttr) {
-                $attrId = DB::table('bc_attrs')->insertGetId([
-                    'name' => 'Travel Styles',
-                    'slug' => 'travel-styles',
-                    'service' => 'tour',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-            } else {
-                $attrId = $travelStylesAttr->id;
+            $theme = Terms::findOrFail($id);
+            $lang = $request->query('lang');
+            $translation = null;
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $theme->translate($lang);
             }
-            
-            $data = [
-                'name' => $request->input('name'),
-                'slug' => $request->input('slug') ?: Str::slug($request->input('name')),
-                'icon' => $request->input('icon'),
-                'image_id' => $request->input('image_id'),
-                'attr_id' => $attrId,
-                'updated_at' => now(),
-            ];
-            
+
+            return response()->json([
+                'data' => [
+                    'id' => $theme->id,
+                    'name' => $translation->name ?? $theme->name,
+                    'slug' => $theme->slug,
+                    'icon' => $theme->icon,
+                    'image_id' => $theme->image_id,
+                    'image_url' => $theme->image_id ? get_file_url($theme->image_id, 'full') : null,
+                    'attr_id' => $theme->attr_id,
+                ],
+                'translation' => $translation,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+
+    // Store/Update tour theme (?lang= for translation save)
+    Route::post('/themes/store/{id?}', function (Request $request, $id = null) use ($resolveTravelStylesAttrId) {
+        try {
+            $lang = $request->query('lang') ?: $request->input('lang');
+            $isTranslation = $lang && !is_default_lang($lang);
+
+            $attrId = $resolveTravelStylesAttrId();
+
             if ($id) {
-                DB::table('bc_terms')->where('id', $id)->update($data);
-                $themeId = $id;
+                $theme = Terms::findOrFail($id);
             } else {
-                $data['created_at'] = now();
-                $themeId = DB::table('bc_terms')->insertGetId($data);
+                $theme = new Terms();
+                $theme->attr_id = $attrId;
             }
-            
+
+            if (!$isTranslation) {
+                $theme->name = $request->input('name');
+                $theme->slug = $request->input('slug') ?: Str::slug($request->input('name'));
+                $theme->icon = $request->input('icon');
+                $theme->image_id = $request->input('image_id');
+                $theme->attr_id = $attrId;
+                $theme->save();
+                $theme->saveTranslation($lang ?: get_main_lang(), false);
+                $message = 'Theme saved successfully';
+            } else {
+                if (!$theme->id) {
+                    return response()->json(['error' => 'Cannot create translation for non-existing theme'], 400);
+                }
+                $theme->saveTranslation($lang, false);
+                $message = 'Theme translation saved successfully';
+            }
+
             return response()->json([
                 'success' => true,
-                'data' => ['id' => $themeId],
+                'data' => ['id' => $theme->id],
+                'message' => $message,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -136,7 +158,8 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
     // Delete tour theme
     Route::delete('/themes/{id}', function ($id) {
         try {
-            DB::table('bc_terms')->where('id', $id)->update(['deleted_at' => now()]);
+            $theme = Terms::findOrFail($id);
+            $theme->delete();
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -176,46 +199,108 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
         }
     });
 
-    // Get tour categories
-    Route::get('/category', function () {
+    // Get tour categories (admin: ?lang=, ?status= [all|publish|draft], ?s=)
+    Route::get('/category', function (Request $request) {
         try {
-            $categories = TourCategory::where('status', 'publish')
-                ->orderBy('name')
-                ->get(['id', 'name', 'slug', 'status', 'parent_id']);
-            
+            $query = TourCategory::query();
+
+            $status = $request->query('status');
+            if ($status && $status !== 'all') {
+                $query->where('status', $status);
+            }
+
+            if ($s = $request->query('s')) {
+                $query->where('name', 'LIKE', '%' . $s . '%');
+            }
+
+            $rows = $query->orderBy('name')->get(['id', 'name', 'slug', 'status', 'parent_id']);
+
+            $lang = $request->query('lang');
+            $categories = $rows->map(function ($cat) use ($lang) {
+                $translation = ($lang && !is_default_lang($lang)) ? $cat->translate($lang) : null;
+                return [
+                    'id' => $cat->id,
+                    'name' => $translation->name ?? $cat->name,
+                    'slug' => $cat->slug,
+                    'status' => $cat->status,
+                    'parent_id' => $cat->parent_id,
+                ];
+            });
+
             return response()->json(['data' => $categories]);
         } catch (\Exception $e) {
             return response()->json(['data' => [], 'error' => $e->getMessage()]);
         }
     });
-    
-    // Create/Update category
-    Route::post('/category/store/{id?}', function (Request $request, $id = null) {
+
+    // Get single tour category for editing (?lang= for translation)
+    Route::get('/category/edit/{id}', function (Request $request, $id) {
         try {
-            if ($id) {
-                $category = TourCategory::findOrFail($id);
-            } else {
-                $category = new TourCategory();
+            $category = TourCategory::findOrFail($id);
+
+            $lang = $request->query('lang');
+            $translation = null;
+            if ($lang && !is_default_lang($lang)) {
+                $translation = $category->translate($lang);
             }
-            
-            $category->fill($request->only(['name', 'slug', 'status', 'parent_id']));
-            $category->save();
-            
+
             return response()->json([
-                'success' => true,
-                'data' => $category,
+                'data' => [
+                    'id' => $category->id,
+                    'name' => $translation->name ?? $category->name,
+                    'slug' => $category->slug,
+                    'status' => $category->status,
+                    'parent_id' => $category->parent_id,
+                ],
+                'translation' => $translation,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     });
-    
+
+    // Create/Update category (?lang= for translation save)
+    Route::post('/category/store/{id?}', function (Request $request, $id = null) {
+        try {
+            $lang = $request->query('lang') ?: $request->input('lang');
+            $isTranslation = $lang && !is_default_lang($lang);
+
+            if ($id) {
+                $category = TourCategory::findOrFail($id);
+            } else {
+                $category = new TourCategory();
+            }
+
+            if (!$isTranslation) {
+                $category->fill($request->only(['name', 'slug', 'status', 'parent_id']));
+                $category->save();
+                // Mirror to default-locale translation row
+                $category->saveTranslation($lang ?: get_main_lang(), false);
+                $message = 'Category saved successfully';
+            } else {
+                if (!$category->id) {
+                    return response()->json(['error' => 'Cannot create translation for non-existing category'], 400);
+                }
+                $category->saveTranslation($lang, false);
+                $message = 'Category translation saved successfully';
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $category,
+                'message' => $message,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    });
+
     // Delete category
     Route::delete('/category/{id}', function ($id) {
         try {
             $category = TourCategory::findOrFail($id);
             $category->delete();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Category deleted successfully',

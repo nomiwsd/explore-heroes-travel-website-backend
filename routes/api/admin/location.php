@@ -27,21 +27,24 @@ Route::prefix('module/location')->middleware('auth:sanctum')->group(function () 
             
             $perPage = $request->per_page ?? 20;
             $locations = $query->orderBy('id', 'desc')->paginate($perPage);
-            
+            $lang = $request->query('lang');
+
             // Transform data
-            $data = $locations->map(function ($loc) {
+            $data = $locations->getCollection()->map(function ($loc) use ($lang) {
                 // Get image URL - ensure null if not found
                 $imageUrl = null;
                 if ($loc->image_id) {
                     $url = get_file_url($loc->image_id, 'full');
                     $imageUrl = $url ?: null;
                 }
-                
+
+                $translation = ($lang && !is_default_lang($lang)) ? $loc->translate($lang) : null;
+
                 return [
                     'id' => $loc->id,
-                    'name' => $loc->name,
+                    'name' => $translation->name ?? $loc->name,
                     'slug' => $loc->slug,
-                    'content' => $loc->content,
+                    'content' => $translation->content ?? $loc->content,
                     'image_id' => $loc->image_id,
                     'image_url' => $imageUrl,
                     'map_lat' => $loc->map_lat,
@@ -53,7 +56,7 @@ Route::prefix('module/location')->middleware('auth:sanctum')->group(function () 
                     'show_on_homepage' => $loc->show_on_homepage,
                     'destination_type' => $loc->destination_type,
                     'display_order' => $loc->display_order,
-                    'short_description' => $loc->translate()->short_description,
+                    'short_description' => $translation->short_description ?? ($loc->translate()->short_description ?? null),
                     'created_at' => $loc->created_at,
                     'updated_at' => $loc->updated_at,
                 ];

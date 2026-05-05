@@ -280,44 +280,62 @@ Route::prefix('destinations')->group(function () {
 // TOUR FILTERS API
 // =====================================================
 
-// Get tour categories (tour types)
-Route::get('/tour-categories', function () {
+// Get tour categories (public, ?lang= for translations)
+Route::get('/tour-categories', function (Request $request) {
     try {
-        $categories = DB::table('bc_tour_category')
-            ->where('status', 'publish')
-            ->whereNull('deleted_at')
-            ->select('id', 'name', 'slug')
+        $lang = $request->query('lang');
+        $rows = TourCategory::where('status', 'publish')
             ->orderBy('name')
-            ->get();
+            ->get(['id', 'name', 'slug', 'parent_id']);
+
+        $data = $rows->map(function ($cat) use ($lang) {
+            $translation = ($lang && !is_default_lang($lang)) ? $cat->translate($lang) : null;
+            return [
+                'id' => $cat->id,
+                'name' => $translation->name ?? $cat->name,
+                'slug' => $cat->slug,
+                'parent_id' => $cat->parent_id,
+            ];
+        });
 
         return response()->json([
-            'data' => $categories,
-            'total' => $categories->count(),
+            'data' => $data,
+            'total' => $data->count(),
         ]);
     } catch (\Exception $e) {
         return response()->json(['data' => [], 'total' => 0, 'error' => $e->getMessage()]);
     }
 });
 
-// Get tour attributes/themes (travel styles)
-Route::get('/tour-themes', function () {
+// Helper closure to fetch translated terms for a given attribute slug
+$publicTermsByAttrSlug = function ($attrSlug, $lang = null) {
+    $attr = DB::table('bc_attrs')
+        ->where('service', 'tour')
+        ->where('slug', $attrSlug)
+        ->first();
+    if (!$attr) return collect();
+
+    $terms = \Modules\Core\Models\Terms::where('attr_id', $attr->id)
+        ->orderBy('name')
+        ->get();
+
+    return $terms->map(function ($term) use ($lang) {
+        $translation = ($lang && !is_default_lang($lang)) ? $term->translate($lang) : null;
+        return [
+            'id' => $term->id,
+            'name' => $translation->name ?? $term->name,
+            'slug' => $term->slug,
+            'icon' => $term->icon,
+            'image_id' => $term->image_id,
+            'image_url' => $term->image_id ? get_file_url($term->image_id, 'full') : null,
+        ];
+    });
+};
+
+// Get tour attributes/themes (travel styles, public, ?lang=)
+Route::get('/tour-themes', function (Request $request) use ($publicTermsByAttrSlug) {
     try {
-        $travelStylesAttr = DB::table('bc_attrs')
-            ->where('service', 'tour')
-            ->where('slug', 'travel-styles')
-            ->first();
-
-        if (!$travelStylesAttr) {
-            return response()->json(['data' => [], 'total' => 0]);
-        }
-
-        $themes = DB::table('bc_terms')
-            ->where('attr_id', $travelStylesAttr->id)
-            ->whereNull('deleted_at')
-            ->select('id', 'name', 'slug', 'icon', 'image_id')
-            ->orderBy('name')
-            ->get();
-
+        $themes = $publicTermsByAttrSlug('travel-styles', $request->query('lang'));
         return response()->json([
             'data' => $themes,
             'total' => $themes->count(),
@@ -327,25 +345,10 @@ Route::get('/tour-themes', function () {
     }
 });
 
-// Get tour facilities/features
-Route::get('/tour-facilities', function () {
+// Get tour facilities/features (public, ?lang=)
+Route::get('/tour-facilities', function (Request $request) use ($publicTermsByAttrSlug) {
     try {
-        $facilitiesAttr = DB::table('bc_attrs')
-            ->where('service', 'tour')
-            ->where('slug', 'facilities')
-            ->first();
-
-        if (!$facilitiesAttr) {
-            return response()->json(['data' => [], 'total' => 0]);
-        }
-
-        $facilities = DB::table('bc_terms')
-            ->where('attr_id', $facilitiesAttr->id)
-            ->whereNull('deleted_at')
-            ->select('id', 'name', 'slug', 'icon', 'image_id')
-            ->orderBy('name')
-            ->get();
-
+        $facilities = $publicTermsByAttrSlug('facilities', $request->query('lang'));
         return response()->json([
             'data' => $facilities,
             'total' => $facilities->count(),
@@ -450,21 +453,38 @@ Route::prefix('tours')->group(function () {
             return response()->json([
                 'data' => $tours->map(function ($tour) use ($lang) {
                     $translation = $lang ? $tour->translate($lang) : null;
-                    // Fetch categories
+                    // Fetch categories (translated)
                     $categories = collect([]);
                      if (!empty($tour->category_ids)) {
                          $catIds = is_string($tour->category_ids) ? json_decode($tour->category_ids, true) : $tour->category_ids;
                          if (is_array($catIds) && count($catIds) > 0) {
-                             $categories = \Modules\Tour\Models\TourCategory::whereIn('id', $catIds)->select('id', 'name', 'slug')->get();
+                             $categories = \Modules\Tour\Models\TourCategory::whereIn('id', $catIds)->get(['id', 'name', 'slug'])
+                                 ->map(function ($c) use ($lang) {
+                                     $tr = ($lang && !is_default_lang($lang)) ? $c->translate($lang) : null;
+                                     return [
+                                         'id' => $c->id,
+                                         'name' => $tr->name ?? $c->name,
+                                         'slug' => $c->slug,
+                                     ];
+                                 });
                          }
                      }
 
-                     // Fetch themes
+                     // Fetch themes (translated)
                      $themes = collect([]);
                      if (!empty($tour->tour_themes)) {
                          $themeIds = is_string($tour->tour_themes) ? json_decode($tour->tour_themes, true) : $tour->tour_themes;
                          if (is_array($themeIds) && count($themeIds) > 0) {
-                            $themes = DB::table('bc_terms')->whereIn('id', $themeIds)->select('id', 'name', 'slug', 'icon')->get();
+                            $themes = \Modules\Core\Models\Terms::whereIn('id', $themeIds)->get(['id', 'name', 'slug', 'icon'])
+                                ->map(function ($t) use ($lang) {
+                                    $tr = ($lang && !is_default_lang($lang)) ? $t->translate($lang) : null;
+                                    return [
+                                        'id' => $t->id,
+                                        'name' => $tr->name ?? $t->name,
+                                        'slug' => $t->slug,
+                                        'icon' => $t->icon,
+                                    ];
+                                });
                          }
                      }
 
@@ -615,12 +635,20 @@ Route::prefix('tours')->group(function () {
                  }
             }
 
-            // Fetch categories (Hydrate full objects from IDs)
+            // Fetch categories (translated)
             $categories = collect([]);
             if (!empty($tour->category_ids)) {
                 $catIds = is_string($tour->category_ids) ? json_decode($tour->category_ids, true) : $tour->category_ids;
                 if (is_array($catIds) && count($catIds) > 0) {
-                    $categories = \Modules\Tour\Models\TourCategory::whereIn('id', $catIds)->select('id', 'name', 'slug')->get();
+                    $categories = \Modules\Tour\Models\TourCategory::whereIn('id', $catIds)->get(['id', 'name', 'slug'])
+                        ->map(function ($c) use ($lang) {
+                            $tr = ($lang && !is_default_lang($lang)) ? $c->translate($lang) : null;
+                            return [
+                                'id' => $c->id,
+                                'name' => $tr->name ?? $c->name,
+                                'slug' => $c->slug,
+                            ];
+                        });
                 }
             }
 
@@ -628,6 +656,23 @@ Route::prefix('tours')->group(function () {
             $tourThemesIds = [];
             if (!empty($tour->tour_themes)) {
                 $tourThemesIds = is_string($tour->tour_themes) ? json_decode($tour->tour_themes, true) : $tour->tour_themes;
+            }
+
+            // Fetch themes (translated) for response
+            $tourThemes = [];
+            if (!empty($tourThemesIds) && is_array($tourThemesIds)) {
+                $tourThemes = \Modules\Core\Models\Terms::whereIn('id', $tourThemesIds)->get(['id', 'name', 'slug', 'icon', 'image_id'])
+                    ->map(function ($t) use ($lang) {
+                        $tr = ($lang && !is_default_lang($lang)) ? $t->translate($lang) : null;
+                        return [
+                            'id' => $t->id,
+                            'name' => $tr->name ?? $t->name,
+                            'slug' => $t->slug,
+                            'icon' => $t->icon,
+                            'image_id' => $t->image_id,
+                            'image_url' => $t->image_id ? get_file_url($t->image_id, 'full') : null,
+                        ];
+                    })->values()->all();
             }
 
             // Get related tours (Prioritize manual related_tour_ids)
@@ -690,10 +735,7 @@ Route::prefix('tours')->group(function () {
                     'exclusions' => $exclude,
                     'highlights' => $highlights,
                     'faqs' => $faqs,
-                    'tour_themes' => collect($tourThemesIds ?? [])->map(function($id) {
-                        $term = DB::table('bc_terms')->where('id', $id)->first();
-                        return $term ? ['id' => $term->id, 'name' => $term->name, 'icon' => $term->icon, 'slug' => $term->slug] : ['id' => $id, 'name' => "Theme $id"];
-                    })->toArray(),
+                    'tour_themes' => $tourThemes,
                     'suitable_for' => $tour->suitable_for,
                     'cities_covered' => $tour->cities_covered,
                     'availability_dates' => $tour->availability_dates,
@@ -1065,8 +1107,32 @@ Route::prefix('news')->group(function () {
             $lang = $request->query('lang');
             $posts = $query->orderBy('id', 'desc')->paginate($request->per_page ?? 10);
 
+            // Pre-fetch tags grouped by news_id to avoid N+1
+            $postIds = collect($posts->items())->pluck('id')->all();
+            $tagsByPost = [];
+            if (!empty($postIds)) {
+                $pivot = \DB::table('core_news_tag')
+                    ->whereIn('news_id', $postIds)
+                    ->whereNull('deleted_at')
+                    ->get(['news_id', 'tag_id']);
+                $allTagIds = $pivot->pluck('tag_id')->unique()->all();
+                $tagRows = !empty($allTagIds)
+                    ? \Modules\News\Models\Tag::whereIn('id', $allTagIds)->get()->keyBy('id')
+                    : collect();
+                foreach ($pivot as $row) {
+                    $tag = $tagRows->get($row->tag_id);
+                    if (!$tag) continue;
+                    $tTrans = ($lang && !is_default_lang($lang)) ? $tag->translate($lang) : null;
+                    $tagsByPost[$row->news_id][] = [
+                        'id' => $tag->id,
+                        'name' => $tTrans->name ?? $tag->name,
+                        'slug' => $tag->slug,
+                    ];
+                }
+            }
+
             // Transform data with images and author
-            $data = $posts->map(function ($post) use ($lang) {
+            $data = collect($posts->items())->map(function ($post) use ($lang, $tagsByPost) {
                 $translation = $lang ? $post->translate($lang) : null;
                 // Get author info
                 $author = null;
@@ -1098,6 +1164,20 @@ Route::prefix('news')->group(function () {
                     }
                 }
 
+                // Translated category for listing card
+                $categoryData = null;
+                if ($post->cat_id) {
+                    $cat = \Modules\News\Models\NewsCategory::find($post->cat_id);
+                    if ($cat) {
+                        $catTrans = ($lang && !is_default_lang($lang)) ? $cat->translate($lang) : null;
+                        $categoryData = [
+                            'id' => $cat->id,
+                            'name' => $catTrans->name ?? $cat->name,
+                            'slug' => $cat->slug,
+                        ];
+                    }
+                }
+
                 return [
                     'id' => $post->id,
                     'title' => $translation->title ?? $post->title,
@@ -1107,6 +1187,8 @@ Route::prefix('news')->group(function () {
                     'status' => $post->status,
                     'is_featured' => $post->is_featured,
                     'cat_id' => $post->cat_id,
+                    'category' => $categoryData,
+                    'tags' => $tagsByPost[$post->id] ?? [],
                     'image_id' => $post->image_id,
                     'image_url' => $imageUrl,
                     'author' => $author,
@@ -1140,7 +1222,31 @@ Route::prefix('news')->group(function () {
                 ->limit($limit)
                 ->get();
 
-            $data = $posts->map(function ($post) use ($lang) {
+            // Pre-fetch tags grouped by news_id to avoid N+1
+            $postIds = $posts->pluck('id')->all();
+            $tagsByPost = [];
+            if (!empty($postIds)) {
+                $pivot = \DB::table('core_news_tag')
+                    ->whereIn('news_id', $postIds)
+                    ->whereNull('deleted_at')
+                    ->get(['news_id', 'tag_id']);
+                $allTagIds = $pivot->pluck('tag_id')->unique()->all();
+                $tagRows = !empty($allTagIds)
+                    ? \Modules\News\Models\Tag::whereIn('id', $allTagIds)->get()->keyBy('id')
+                    : collect();
+                foreach ($pivot as $row) {
+                    $tag = $tagRows->get($row->tag_id);
+                    if (!$tag) continue;
+                    $tTrans = ($lang && !is_default_lang($lang)) ? $tag->translate($lang) : null;
+                    $tagsByPost[$row->news_id][] = [
+                        'id' => $tag->id,
+                        'name' => $tTrans->name ?? $tag->name,
+                        'slug' => $tag->slug,
+                    ];
+                }
+            }
+
+            $data = $posts->map(function ($post) use ($lang, $tagsByPost) {
                 $translation = $lang ? $post->translate($lang) : null;
                 // Get author info
                 $author = null;
@@ -1172,6 +1278,20 @@ Route::prefix('news')->group(function () {
                     }
                 }
 
+                // Translated category
+                $categoryData = null;
+                if ($post->cat_id) {
+                    $cat = \Modules\News\Models\NewsCategory::find($post->cat_id);
+                    if ($cat) {
+                        $catTrans = ($lang && !is_default_lang($lang)) ? $cat->translate($lang) : null;
+                        $categoryData = [
+                            'id' => $cat->id,
+                            'name' => $catTrans->name ?? $cat->name,
+                            'slug' => $cat->slug,
+                        ];
+                    }
+                }
+
                 return [
                     'id' => $post->id,
                     'title' => $translation->title ?? $post->title,
@@ -1180,6 +1300,8 @@ Route::prefix('news')->group(function () {
                     'excerpt' => $translation->excerpt ?? $post->excerpt,
                     'is_featured' => $post->is_featured,
                     'cat_id' => $post->cat_id,
+                    'category' => $categoryData,
+                    'tags' => $tagsByPost[$post->id] ?? [],
                     'image_id' => $post->image_id,
                     'image_url' => $imageUrl,
                     'author' => $author,
@@ -1261,13 +1383,24 @@ Route::prefix('news')->group(function () {
         }
     });
 
-    // Get all locations for blogs
-    Route::get('/all-locations', function () {
+    // Get all locations for blogs (supports ?lang= for translated names)
+    Route::get('/all-locations', function (Request $request) {
         try {
-            $locations = Location::where('status', 'publish')
+            $lang = $request->query('lang');
+            $rows = Location::where('status', 'publish')
                 ->orderBy('name')
                 ->get(['id', 'name', 'slug']);
-            return response()->json(['data' => $locations]);
+
+            $data = $rows->map(function ($loc) use ($lang) {
+                $translation = ($lang && !is_default_lang($lang)) ? $loc->translate($lang) : null;
+                return [
+                    'id' => $loc->id,
+                    'name' => $translation->name ?? $loc->name,
+                    'slug' => $loc->slug,
+                ];
+            });
+
+            return response()->json(['data' => $data]);
         } catch (\Exception $e) {
             return response()->json(['data' => []]);
         }
@@ -1292,10 +1425,37 @@ Route::prefix('news')->group(function () {
                 $translation = $post->translate($lang);
             }
 
-            // Get category
+            // Get category (translated)
             $category = null;
             if ($post->cat_id) {
-                $category = \Modules\News\Models\NewsCategory::find($post->cat_id);
+                $cat = \Modules\News\Models\NewsCategory::find($post->cat_id);
+                if ($cat) {
+                    $catTranslation = ($lang && !is_default_lang($lang)) ? $cat->translate($lang) : null;
+                    $category = [
+                        'id' => $cat->id,
+                        'name' => $catTranslation->name ?? $cat->name,
+                        'slug' => $cat->slug,
+                    ];
+                }
+            }
+
+            // Get tags (translated) for this post via core_news_tag pivot
+            $tags = [];
+            $tagIds = \DB::table('core_news_tag')
+                ->where('news_id', $post->id)
+                ->whereNull('deleted_at')
+                ->pluck('tag_id')
+                ->all();
+            if (!empty($tagIds)) {
+                $tagRows = \Modules\News\Models\Tag::whereIn('id', $tagIds)->get();
+                $tags = $tagRows->map(function ($t) use ($lang) {
+                    $tTrans = ($lang && !is_default_lang($lang)) ? $t->translate($lang) : null;
+                    return [
+                        'id' => $t->id,
+                        'name' => $tTrans->name ?? $t->name,
+                        'slug' => $t->slug,
+                    ];
+                })->all();
             }
 
             // Get author info
@@ -1383,6 +1543,7 @@ Route::prefix('news')->group(function () {
                     'image_alt' => $post->image_alt ?? null,
                     'cat_id' => $post->cat_id,
                     'category' => $category,
+                    'tags' => $tags,
                     'location' => $post->location ? [
                         'id' => $post->location->id,
                         'name' => $post->location->name,
