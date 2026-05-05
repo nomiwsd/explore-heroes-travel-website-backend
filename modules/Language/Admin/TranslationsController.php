@@ -284,6 +284,8 @@ class TranslationsController extends AdminController
                 if (preg_match_all("/\bt\(\s*['\"]([^'\"]+)['\"]\s*(?:,\s*['\"]([^'\"]+)['\"])?/siU", $file->getContents(), $matches)) {
                     foreach ($matches[1] as $index => $key) {
                         if (!$key) continue;
+                        // Filter out invalid keys (numeric only, too short, no English letters)
+                        if (!$this->isValidTranslationKey($key)) continue;
                         $defaultText = !empty($matches[2][$index]) ? $matches[2][$index] : $key;
                         $keys[$key] = $defaultText;
                     }
@@ -295,6 +297,9 @@ class TranslationsController extends AdminController
         $all_string = Translation::select("string", "id")->where("locale", "raw")->get()->pluck('id', 'string')->toArray();
 
         foreach ($keys as $key => $defaultText) {
+            // Double-check before insert (in case backend scan caught anything weird)
+            if (!$this->isValidTranslationKey($key)) continue;
+
             if(empty($all_string[ $key ])){
                 $raw = new Translation([
                     'locale' => 'raw',
@@ -320,6 +325,51 @@ class TranslationsController extends AdminController
 
         // Return the number of found translations
         return count($keys);
+    }
+
+    /**
+     * Filter out invalid translation keys.
+     * Skips: pure numbers, too short, keys without any English letter, dates, hex colors, URLs, etc.
+     */
+    protected function isValidTranslationKey($key): bool
+    {
+        if (!is_string($key)) return false;
+
+        // Skip empty or whitespace-only
+        $key = trim($key);
+        if ($key === '') return false;
+
+        // Skip too short (less than 2 chars)
+        if (mb_strlen($key) < 2) return false;
+
+        // Skip purely numeric (e.g. "100", "1", "20")
+        if (is_numeric($key)) return false;
+
+        // Skip if no English letter present (e.g. "100%", "$$$", "★★★")
+        if (!preg_match('/[A-Za-z]/', $key)) return false;
+
+        // Skip date-like strings (yyyy-mm-dd or similar)
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $key)) return false;
+
+        // Skip hex colors
+        if (preg_match('/^#[0-9A-Fa-f]{3,8}$/', $key)) return false;
+
+        // Skip URLs/paths
+        if (preg_match('/^(https?:\/\/|\/[a-z]|\.\.\/|\.\/)/i', $key)) return false;
+
+        // Skip CSS values (e.g. "10px", "100%", "1.5rem")
+        if (preg_match('/^\d+(\.\d+)?(px|rem|em|vh|vw|%|s|ms)$/i', $key)) return false;
+
+        // Skip pure file extensions like ".jpg", ".png"
+        if (preg_match('/^\.[a-z0-9]{1,5}$/i', $key)) return false;
+
+        // Skip identifiers that look like CSS class strings or HTML attribute fragments
+        if (preg_match('/^(text|bg|border|p|m|w|h|flex|grid|rounded|shadow)-/i', $key)) return false;
+
+        // Skip if key contains only special chars + numbers (no real word)
+        if (preg_match('/^[\W\d_]+$/', $key) && !preg_match('/[A-Za-z]{2,}/', $key)) return false;
+
+        return true;
     }
 
     public function loadTranslateJson(Request $request)
@@ -777,6 +827,9 @@ class TranslationsController extends AdminController
                     $defaultText = $key['default'] ?? $key['key'];
                     $key = $key['key'];
                 }
+
+                // Filter out invalid keys
+                if (!$this->isValidTranslationKey($key)) continue;
 
                 if (empty($all_string[$key])) {
                     $raw = new Translation([
