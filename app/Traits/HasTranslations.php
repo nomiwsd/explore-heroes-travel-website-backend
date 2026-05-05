@@ -147,28 +147,28 @@ trait HasTranslations
             ? collect($data)->only($fillable)->toArray()
             : collect(request()->input())->only($fillable)->toArray();
 
-        \Illuminate\Support\Facades\Log::info('[forceSaveTranslation] called', [
-            'model' => get_class($this),
-            'origin_id' => $this->getKey(),
-            'locale' => $locale,
-            'translation_class' => $class,
-            'fillable' => $fillable,
-            'payload' => $payload,
-            'request_input_keys' => array_keys(request()->input()),
-        ]);
+        // Find existing translation row OR create a fresh instance.
+        // We don't use updateOrCreate() because translation models often have
+        // fillable = ['name', 'content'] and fill() would strip origin_id/locale.
+        $translation = $class::query()
+            ->where('origin_id', $this->getKey())
+            ->where('locale', $locale)
+            ->first();
 
-        $translation = $class::updateOrCreate(
-            [
-                'origin_id' => $this->getKey(),
-                'locale' => $locale,
-            ],
-            $payload
-        );
+        if (!$translation) {
+            $translation = new $class();
+        }
 
-        \Illuminate\Support\Facades\Log::info('[forceSaveTranslation] saved', [
-            'translation_id' => $translation->id ?? null,
-            'translation_data' => $translation->toArray(),
-        ]);
+        // Set the foreign key + locale via setAttribute (bypasses fillable guard)
+        $translation->setAttribute('origin_id', $this->getKey());
+        $translation->setAttribute('locale', $locale);
+
+        // Set the translatable fields
+        foreach ($payload as $key => $value) {
+            $translation->setAttribute($key, $value);
+        }
+
+        $translation->save();
 
         return $translation;
     }
