@@ -519,21 +519,28 @@ Route::prefix('module/news/category')->middleware('auth:sanctum')->group(functio
                 if (isset($catData['description']) && empty($catData['content'])) {
                     $catData['content'] = $catData['description'];
                 }
-                $category->forceSaveTranslation($lang, $catData);
+                $savedTranslation = $category->forceSaveTranslation($lang, $catData);
                 $message = 'Category translation saved successfully';
             }
+
+            // Re-read the translation to confirm the row exists in DB
+            $confirmTranslation = ($lang && !is_default_lang($lang))
+                ? $category->forceTranslate($lang)
+                : null;
 
             return response()->json([
                 'success' => true,
                 'data' => [
                     'id' => $category->id,
-                    'name' => $category->name,
+                    'name' => $confirmTranslation->name ?? $category->name,
                     'slug' => $category->slug,
-                    'description' => $category->content,
-                    'content' => $category->content,
+                    'description' => $confirmTranslation->content ?? $category->content,
+                    'content' => $confirmTranslation->content ?? $category->content,
                     'image_id' => $category->image_id,
                     'status' => $category->status,
                 ],
+                'translation_saved' => $confirmTranslation ? $confirmTranslation->toArray() : null,
+                'origin_name' => $category->name,
                 'message' => $message,
             ]);
         } catch (\Exception $e) {
@@ -679,14 +686,21 @@ Route::prefix('module/news/tag')->middleware('auth:sanctum')->group(function () 
                 $message = 'Tag translation saved successfully';
             }
 
+            // Re-read to confirm translation persisted in DB
+            $confirmTranslation = ($lang && !is_default_lang($lang))
+                ? $tag->forceTranslate($lang)
+                : null;
+
             return response()->json([
                 'success' => true,
                 'data' => [
                     'id' => $tag->id,
-                    'name' => $tag->name,
+                    'name' => $confirmTranslation->name ?? $tag->name,
                     'slug' => $tag->slug,
-                    'content' => $tag->content,
+                    'content' => $confirmTranslation->content ?? $tag->content,
                 ],
+                'translation_saved' => $confirmTranslation ? $confirmTranslation->toArray() : null,
+                'origin_name' => $tag->name,
                 'message' => $message,
             ]);
         } catch (\Exception $e) {
