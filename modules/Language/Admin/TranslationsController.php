@@ -459,12 +459,21 @@ class TranslationsController extends AdminController
         $query = Translation::select([
             'core_translations.id',
             'core_translations.string as key',
-            'core_translations.string as original',
+            // Show actual English text as "original" so admin sees readable text instead of snake_case key.
+            // Falls back to the raw key only if English translation hasn't been auto-filled yet.
+            \DB::raw("COALESCE(NULLIF(en.string, ''), core_translations.string) as original"),
             't.string as translation'
         ]);
 
         $query->where('core_translations.locale', 'raw');
 
+        // Join with English translation (so we can display English text as "Original")
+        $query->leftJoin('core_translations as en', function ($join) {
+            $join->on('en.parent_id', '=', 'core_translations.id');
+            $join->where('en.locale', '=', 'en');
+        });
+
+        // Join with target locale translation
         $query->leftJoin('core_translations as t', function ($join) use ($lang) {
             $join->on('t.parent_id', '=', 'core_translations.id');
             $join->where('t.locale', '=', $lang->locale);
@@ -482,10 +491,11 @@ class TranslationsController extends AdminController
             }
         }
 
-        // Search
+        // Search (matches against key, English text, OR target translation)
         if ($request->s) {
             $query->where(function($q) use ($request) {
                 $q->where('core_translations.string', 'like', '%' . $request->s . '%')
+                  ->orWhere('en.string', 'like', '%' . $request->s . '%')
                   ->orWhere('t.string', 'like', '%' . $request->s . '%');
             });
         }
