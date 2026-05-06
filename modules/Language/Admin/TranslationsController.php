@@ -290,8 +290,10 @@ class TranslationsController extends AdminController
                 ->files();
 
             foreach ($frontendFinder as $file) {
-                // Modified regex to capture both key and optional default text: t('key', 'default')
-                if (preg_match_all("/\bt\(\s*['\"]([^'\"]+)['\"]\s*(?:,\s*['\"]([^'\"]+)['\"])?/siU", $file->getContents(), $matches)) {
+                // Capture both key and optional default text: t('key', 'default')
+                // NOTE: NO `U` (ungreedy) flag — that flag was causing the optional second group
+                // to be skipped, leaving English value equal to the snake_case key.
+                if (preg_match_all("/\bt\(\s*['\"]([^'\"]+)['\"]\s*(?:,\s*['\"]([^'\"]+)['\"])?/si", $file->getContents(), $matches)) {
                     foreach ($matches[1] as $index => $key) {
                         if (!$key) continue;
                         // Filter out invalid keys (numeric only, too short, no English letters)
@@ -321,7 +323,7 @@ class TranslationsController extends AdminController
                 $parentId = $all_string[$key];
             }
 
-            // Auto-fill English (en) if it doesn't exist
+            // Auto-fill English (en) if it doesn't exist OR if existing value is wrong (equals key)
             $checkEn = Translation::where('locale', 'en')->where('parent_id', $parentId)->first();
             if (!$checkEn) {
                 $en = new Translation([
@@ -330,6 +332,11 @@ class TranslationsController extends AdminController
                     'parent_id' => $parentId
                 ]);
                 $en->save();
+            } elseif ($checkEn->string === $key && $defaultText !== $key) {
+                // Existing English value is the snake_case key (bug from previous regex with U flag).
+                // Replace with the actual default text now that we have it.
+                $checkEn->string = $defaultText;
+                $checkEn->save();
             }
         }
 
