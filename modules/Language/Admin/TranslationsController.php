@@ -268,7 +268,17 @@ class TranslationsController extends AdminController
         // 2. Scan Frontend (TSX/TS) - Configurable Path
         // In local dev: sibling directory. In prod: might need to be set via env or skipped if not accessible
         $frontendPathEnv = env('FRONTEND_PATH', '../explore-heros-travel-website');
-        $frontendPath = base_path($frontendPathEnv);
+
+        // Handle both ABSOLUTE and RELATIVE paths.
+        // If env value starts with `/` (Linux abs) or `X:` (Windows abs), use as-is. Else resolve via base_path.
+        $isAbsolute = str_starts_with($frontendPathEnv, '/') || preg_match('/^[A-Za-z]:/', $frontendPathEnv);
+        $frontendPath = $isAbsolute ? $frontendPathEnv : base_path($frontendPathEnv);
+
+        \Illuminate\Support\Facades\Log::info('[findTranslations] Frontend scan path', [
+            'FRONTEND_PATH_env' => $frontendPathEnv,
+            'resolved_path' => $frontendPath,
+            'exists' => is_dir($frontendPath),
+        ]);
 
         if (is_dir($frontendPath)) {
             $frontendFinder = new Finder();
