@@ -45,31 +45,45 @@ class Settings extends BaseModel
     /**
      * Read settings for a group with optional locale overlay.
      *
-     * Behaviour:
-     *  - Reads all default rows (lang IS NULL or '')
-     *  - When $locale is provided AND non-default, overlays any non-empty values
-     *    from rows where lang = $locale ON TOP of the defaults
-     *  - Result: every key resolves to its localized value when present,
-     *    otherwise falls back to the default
+     * Default-row matching is permissive on purpose: the original code never
+     * filtered by lang, so existing rows in the wild may have lang = NULL,
+     * lang = '', OR lang = the site's main locale (e.g. 'en'). All three are
+     * treated as "the default row" for that key. Without this the new code
+     * would hide pre-existing settings data.
+     *
+     * Priority when multiple default rows exist for the same name:
+     *   NULL  >  empty string  >  main_lang
+     *
+     * When $locale is non-default, locale-specific rows overlay the defaults.
      */
     public static function getSettings($group = '', $locale = '')
     {
+        $mainLang = function_exists('get_main_lang') ? get_main_lang() : 'en';
+
         $query = static::query();
         if ($group) {
             $query->where('group', $group);
         }
-        // Defaults: lang null/empty
-        $defaults = (clone $query)->where(function ($q) {
-            $q->whereNull('lang')->orWhere('lang', '');
-        })->get();
+        // Default rows: lang null/empty/main_lang — sorted so NULL/empty win over main_lang
+        $defaults = (clone $query)
+            ->where(function ($q) use ($mainLang) {
+                $q->whereNull('lang')
+                  ->orWhere('lang', '')
+                  ->orWhere('lang', $mainLang);
+            })
+            ->orderByRaw("CASE WHEN lang IS NULL THEN 0 WHEN lang = '' THEN 1 ELSE 2 END")
+            ->get();
 
         $res = [];
         foreach ($defaults as $row) {
-            $res[$row->name] = $row->val;
+            // First (highest-priority) row for each name wins
+            if (!array_key_exists($row->name, $res)) {
+                $res[$row->name] = $row->val;
+            }
         }
 
-        $isMultiLang = function_exists('is_default_lang') ? !is_default_lang($locale) : (!empty($locale) && $locale !== 'en');
-        if (!empty($locale) && $isMultiLang) {
+        $isMultiLang = !empty($locale) && (function_exists('is_default_lang') ? !is_default_lang($locale) : ($locale !== $mainLang));
+        if ($isMultiLang) {
             $localized = static::query()
                 ->when($group, fn ($q) => $q->where('group', $group))
                 ->where('lang', $locale)
@@ -133,18 +147,24 @@ class Settings extends BaseModel
             $row->group = $group;
             $row->save();
         } else {
-            // Default (global) row: lang null/empty
+            // Default (global) row: match the same permissive set as getSettings
+            // so we update existing legacy rows instead of creating duplicates.
+            $mainLang = function_exists('get_main_lang') ? get_main_lang() : 'en';
             $row = self::query()
                 ->where('name', $key)
-                ->where(function ($q) {
-                    $q->whereNull('lang')->orWhere('lang', '');
+                ->where(function ($q) use ($mainLang) {
+                    $q->whereNull('lang')
+                      ->orWhere('lang', '')
+                      ->orWhere('lang', $mainLang);
                 })
+                ->orderByRaw("CASE WHEN lang IS NULL THEN 0 WHEN lang = '' THEN 1 ELSE 2 END")
                 ->first();
             if (!$row) {
                 $row = new self();
                 $row->name = $key;
                 $row->lang = null;
             }
+            // Don't rewrite the lang column on existing rows — preserve whatever it was
             $row->val   = $value;
             $row->group = $group;
             $row->save();
