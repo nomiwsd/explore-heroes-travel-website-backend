@@ -43,29 +43,28 @@ class Settings extends BaseModel
     }
 
     /**
-     * Read settings for a group with optional locale overlay.
+     * Read settings with optional locale overlay.
      *
-     * Default-row matching is permissive on purpose: the original code never
-     * filtered by lang, so existing rows in the wild may have lang = NULL,
-     * lang = '', OR lang = the site's main locale (e.g. 'en'). All three are
-     * treated as "the default row" for that key. Without this the new code
-     * would hide pre-existing settings data.
+     * IMPORTANT: $group is intentionally NOT used as a hard filter here.
+     * The original Booking Core code had a long-standing bug
+     *   `static::where('group', $group);` (result discarded — never chained)
+     * meaning every caller actually received ALL rows regardless of group.
+     * Most legacy rows in the wild have `group = NULL`, so applying a strict
+     * group filter hides pre-existing data (footer text, contact info, payments,
+     * etc.). We preserve the old all-rows behaviour for backward compatibility,
+     * and frontends keep their own key-whitelists per page.
      *
-     * Priority when multiple default rows exist for the same name:
-     *   NULL  >  empty string  >  main_lang
+     * Default-row priority when duplicates exist for the same `name`:
+     *   lang IS NULL  >  lang = ''  >  lang = main_lang
      *
-     * When $locale is non-default, locale-specific rows overlay the defaults.
+     * When $locale is non-default, rows with lang = $locale overlay the defaults.
      */
     public static function getSettings($group = '', $locale = '')
     {
         $mainLang = function_exists('get_main_lang') ? get_main_lang() : 'en';
 
-        $query = static::query();
-        if ($group) {
-            $query->where('group', $group);
-        }
-        // Default rows: lang null/empty/main_lang — sorted so NULL/empty win over main_lang
-        $defaults = (clone $query)
+        // Default rows = anything that isn't tagged with a NON-default locale.
+        $defaults = static::query()
             ->where(function ($q) use ($mainLang) {
                 $q->whereNull('lang')
                   ->orWhere('lang', '')
@@ -76,7 +75,6 @@ class Settings extends BaseModel
 
         $res = [];
         foreach ($defaults as $row) {
-            // First (highest-priority) row for each name wins
             if (!array_key_exists($row->name, $res)) {
                 $res[$row->name] = $row->val;
             }
@@ -85,7 +83,6 @@ class Settings extends BaseModel
         $isMultiLang = !empty($locale) && (function_exists('is_default_lang') ? !is_default_lang($locale) : ($locale !== $mainLang));
         if ($isMultiLang) {
             $localized = static::query()
-                ->when($group, fn ($q) => $q->where('group', $group))
                 ->where('lang', $locale)
                 ->get();
             foreach ($localized as $row) {
