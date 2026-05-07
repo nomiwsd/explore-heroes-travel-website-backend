@@ -822,11 +822,12 @@ Route::prefix('tours')->group(function () {
 });
 
 // =====================================================
-// SETTINGS API
+// SETTINGS API — locale-aware
 // =====================================================
 Route::prefix('settings')->group(function () {
-    Route::get('/{group?}', function ($group = 'general') {
-        $settings = Settings::getSettings($group);
+    Route::get('/{group?}', function (Request $request, $group = 'general') {
+        $lang = $request->query('lang');
+        $settings = Settings::getSettings($group, $lang);
         return response()->json($settings);
     });
 });

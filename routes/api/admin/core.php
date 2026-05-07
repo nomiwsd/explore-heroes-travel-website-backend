@@ -327,33 +327,44 @@ Route::prefix('module/core/menu')->group(function () {
 // SETTINGS MANAGEMENT
 // =====================================================
 Route::prefix('module/core/settings')->group(function () {
-    // Get settings by group
-    Route::get('/index/{group?}', function ($group = 'general') {
+    // Get settings by group — locale-aware
+    Route::get('/index/{group?}', function (Request $request, $group = 'general') {
         try {
-            $settings = Settings::getSettings($group);
+            $lang = $request->query('lang');
+            $settings = Settings::getSettings($group, $lang);
             return response()->json([
                 'settings' => $settings,
-                'group' => $group,
+                'group'    => $group,
+                'lang'     => $lang,
+                'translatable_keys' => Settings::TRANSLATABLE_KEYS,
             ]);
         } catch (\Exception $e) {
             return response()->json(['settings' => [], 'group' => $group, 'error' => $e->getMessage()]);
         }
     });
 
-    // Update settings
+    // Update settings — locale-aware. When ?lang=xx is non-default, only
+    // translatable keys are persisted to per-locale rows; other keys are ignored
+    // (they live on the default row only and shouldn't change per locale).
     Route::middleware('auth:sanctum')->post('/store/{group?}', function (Request $request, $group = 'general') {
         try {
             $data = $request->all();
+            $lang = $request->input('lang') ?: $request->query('lang');
+            $isMultiLang = !empty($lang) && (function_exists('is_default_lang') ? !is_default_lang($lang) : $lang !== 'en');
 
             foreach ($data as $key => $value) {
-                if ($key !== '_token') {
-                    Settings::store($key, $value, $group);
+                if ($key === '_token' || $key === 'lang') continue;
+
+                // For non-default lang, skip non-translatable keys to preserve global config
+                if ($isMultiLang && !Settings::isTranslatable($key)) {
+                    continue;
                 }
+                Settings::store($key, $value, $group, $isMultiLang ? $lang : null);
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Settings updated successfully',
+                'message' => $isMultiLang ? "Settings translation ({$lang}) saved" : 'Settings updated successfully',
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);

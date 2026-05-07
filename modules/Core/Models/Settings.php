@@ -12,18 +12,75 @@ class Settings extends BaseModel
     use HasEvents;
 
     protected $table = 'core_settings';
-    protected $fillable=['name','group','val'];
+    protected $fillable=['name','group','val','lang'];
 
-    public static function getSettings($group = '',$locale = '')
+    /**
+     * Settings keys whose values can vary per locale. Anything not in this list
+     * is stored once globally (lang = NULL) — toggles, IDs, colors, emails, etc.
+     */
+    public const TRANSLATABLE_KEYS = [
+        'site_name',
+        'site_title',
+        'site_tagline',
+        'site_desc',
+        'topbar_left_text',
+        'footer_text_left',
+        'footer_text_right',
+        'address',
+        'from_name',
+        // Payment icons can be region-specific
+        'payment_custom_icon_url',
+        'payment_icon_apple_pay',
+        'payment_icon_google_pay',
+        'payment_icon_paypal',
+        'payment_icon_cards',
+        'payment_icon_alipay',
+    ];
+
+    public static function isTranslatable(string $key): bool
     {
+        return in_array($key, self::TRANSLATABLE_KEYS, true);
+    }
+
+    /**
+     * Read settings for a group with optional locale overlay.
+     *
+     * Behaviour:
+     *  - Reads all default rows (lang IS NULL or '')
+     *  - When $locale is provided AND non-default, overlays any non-empty values
+     *    from rows where lang = $locale ON TOP of the defaults
+     *  - Result: every key resolves to its localized value when present,
+     *    otherwise falls back to the default
+     */
+    public static function getSettings($group = '', $locale = '')
+    {
+        $query = static::query();
         if ($group) {
-            static::where('group', $group);
+            $query->where('group', $group);
         }
-        $all = static::groupBy('name')->get();
+        // Defaults: lang null/empty
+        $defaults = (clone $query)->where(function ($q) {
+            $q->whereNull('lang')->orWhere('lang', '');
+        })->get();
+
         $res = [];
-        foreach ($all as $row) {
+        foreach ($defaults as $row) {
             $res[$row->name] = $row->val;
         }
+
+        $isMultiLang = function_exists('is_default_lang') ? !is_default_lang($locale) : (!empty($locale) && $locale !== 'en');
+        if (!empty($locale) && $isMultiLang) {
+            $localized = static::query()
+                ->when($group, fn ($q) => $q->where('group', $group))
+                ->where('lang', $locale)
+                ->get();
+            foreach ($localized as $row) {
+                if ($row->val !== null && $row->val !== '') {
+                    $res[$row->name] = $row->val;
+                }
+            }
+        }
+
         return $res;
     }
 
@@ -48,19 +105,49 @@ class Settings extends BaseModel
         return (empty($value) and strlen($value)===0)?$default:$value;
     }
 
-    public static function store($key, $data, $group = 'general')
+    /**
+     * Store a setting. When $locale is non-default AND the key is translatable,
+     * the value is saved into a per-locale row (lang = $locale) so the default
+     * row stays intact and falls back when no translation exists.
+     *
+     * For non-translatable keys, $locale is ignored (they are global).
+     */
+    public static function store($key, $data, $group = 'general', $locale = null)
     {
-        $check = Settings::where('name', $key)->first();
-        if ($check) {
-            $check->val = is_array($data) ? json_encode($data) : $data;
-            $check->group = $group;
-            $check->save();
+        $value = is_array($data) ? json_encode($data) : $data;
+
+        $isMultiLang = !empty($locale) && (function_exists('is_default_lang') ? !is_default_lang($locale) : $locale !== 'en');
+        $useLocaleRow = $isMultiLang && self::isTranslatable($key);
+
+        if ($useLocaleRow) {
+            $row = self::query()
+                ->where('name', $key)
+                ->where('lang', $locale)
+                ->first();
+            if (!$row) {
+                $row = new self();
+                $row->name = $key;
+                $row->lang = $locale;
+            }
+            $row->val   = $value;
+            $row->group = $group;
+            $row->save();
         } else {
-            $check = new self();
-            $check->val = is_array($data) ? json_encode($data) : $data;
-            $check->name = $key;
-            $check->group = $group;
-            $check->save();
+            // Default (global) row: lang null/empty
+            $row = self::query()
+                ->where('name', $key)
+                ->where(function ($q) {
+                    $q->whereNull('lang')->orWhere('lang', '');
+                })
+                ->first();
+            if (!$row) {
+                $row = new self();
+                $row->name = $key;
+                $row->lang = null;
+            }
+            $row->val   = $value;
+            $row->group = $group;
+            $row->save();
         }
 
         Cache::forget('setting_' . $key);
