@@ -7,6 +7,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Modules\Review\Models\Review;
+use Modules\Review\Models\ReviewTranslation;
 
 // =====================================================
 // REVIEW MANAGEMENT
@@ -53,8 +54,8 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
         }
     });
     
-    // Get single review
-    Route::get('/edit/{id}', function ($id) {
+    // Get single review (locale-aware: ?lang=xx returns translation row alongside data)
+    Route::get('/edit/{id}', function (Request $request, $id) {
         try {
             $review = Review::with(['author'])->findOrFail($id);
 
@@ -77,12 +78,23 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
                 }
             }
 
+            // Locale-aware: when ?lang=xx is non-default, fetch translation row.
+            // Frontend uses this to show empty inputs for un-translated languages.
+            $lang = $request->query('lang');
+            $translation = null;
+            if (!empty($lang) && function_exists('is_default_lang') && !is_default_lang($lang)) {
+                $translation = ReviewTranslation::query()
+                    ->where('origin_id', $review->id)
+                    ->where('locale', $lang)
+                    ->first();
+            }
+
             return response()->json([
                 'data' => [
                     'id' => $review->id,
                     'title' => $review->title,
                     'content' => $review->content,
-                    'rating' => $review->rate_number, 
+                    'rating' => $review->rate_number,
                     'rate_number' => $review->rate_number,
                     'object_id' => $review->object_id,
                     'object_model' => $review->object_model,
@@ -108,6 +120,7 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
                     'service' => $review->service,
                     'created_at' => $review->created_at,
                 ],
+                'translation' => $translation ? $translation->toArray() : null,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -183,11 +196,42 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
         }
     });
     
-    // Update review
+    // Update review (locale-aware: ?lang=xx saves only translatable fields to translation table)
     Route::post('/store/{id}', function (Request $request, $id) {
         try {
             $review = Review::findOrFail($id);
-            
+
+            // Detect translation save (non-default lang). Only translatable fields are persisted
+            // to bc_review_translations; the origin row is left untouched so non-translatable
+            // metadata (rating, status, author info, images) stays a single source of truth.
+            $lang = $request->input('lang') ?: $request->query('lang');
+            $isTranslationSave = !empty($lang) && function_exists('is_default_lang') && !is_default_lang($lang);
+
+            if ($isTranslationSave) {
+                $translation = ReviewTranslation::firstOrNew([
+                    'origin_id' => $review->id,
+                    'locale'    => $lang,
+                ]);
+                $translation->title        = (string) $request->input('title', '');
+                $translation->content      = (string) $request->input('content', '');
+                $translation->trip_summary = (string) $request->input('trip_summary', '');
+                $translation->agent_role   = (string) $request->input('agent_role', '');
+                $translation->save();
+
+                // Cache invalidation so public listings re-render with new translation
+                if ($review->object_id && $review->object_model) {
+                    \Illuminate\Support\Facades\Cache::forget("review_" . $review->object_model . "_" . $review->object_id);
+                }
+
+                return response()->json([
+                    'success'     => true,
+                    'data'        => ['id' => $review->id],
+                    'translation' => $translation->fresh()->toArray(),
+                    'message'     => "Review translation ({$lang}) saved",
+                ]);
+            }
+
+            // Default-locale (origin) save
             $review->title = $request->input('title', $review->title);
             $review->content = $request->input('content', $review->content);
             $review->rate_number = $request->input('rating', $request->input('rate_number', $review->rate_number));
@@ -208,7 +252,7 @@ Route::prefix('module/review')->middleware('auth:sanctum')->group(function () {
             $review->agent_name = $request->input('agent_name', $review->agent_name);
             $review->agent_role = $request->input('agent_role', $review->agent_role);
             $review->agent_photo = $request->input('agent_photo', $review->agent_photo);
-            
+
             $review->save();
 
             // Handle Images (Replace logic: Delete old, Add new)

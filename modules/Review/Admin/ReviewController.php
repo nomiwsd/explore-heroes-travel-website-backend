@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Cache;
 use Modules\AdminController;
 use Modules\Review\Models\Review;
 use Modules\Review\Models\ReviewMeta;
+use Modules\Review\Models\ReviewTranslation;
 use Modules\Media\Models\MediaFile;
 use Modules\Tour\Models\Tour;
 
@@ -168,13 +169,25 @@ class ReviewController extends AdminController
         }
         $review = Review::with(['author'])->findOrFail($id);
 
+        // Locale-aware: when ?lang=xx is non-default, fetch translation row so the
+        // admin can edit per-locale text. Default-lang requests return null translation.
+        $lang = $request->query('lang');
+        $translation = null;
+        if (!empty($lang) && function_exists('is_default_lang') && !is_default_lang($lang)) {
+            $translation = ReviewTranslation::query()
+                ->where('origin_id', $review->id)
+                ->where('locale', $lang)
+                ->first();
+        }
+
         if ($request->wantsJson() || $request->expectsJson()) {
             return response()->json([
-                'data' => $this->transformReview($review)
+                'data'        => $this->transformReview($review),
+                'translation' => $translation ? $translation->toArray() : null,
             ]);
         }
-        
-        return view('Review::admin.edit', ['row' => $review]);
+
+        return view('Review::admin.edit', ['row' => $review, 'translation' => $translation]);
     }
 
     public function store(Request $request, $id = null)
@@ -182,21 +195,65 @@ class ReviewController extends AdminController
         if (!$this->hasPermission('review_manage_others') && !$this->hasPermission('review_manage')) {
             abort(403);
         }
-        
+
+        // Detect locale-aware save. When lang is non-default we ONLY persist translatable
+        // fields into bc_review_translations and skip the strict origin-table validation.
+        $lang = $request->input('lang') ?: $request->query('lang');
+        $isTranslationSave = !empty($lang) && function_exists('is_default_lang') && !is_default_lang($lang);
+
+        if ($isTranslationSave) {
+            // Translation save needs the origin row to exist
+            if (!$id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot create translation without an existing review',
+                ], 422);
+            }
+            $review = Review::findOrFail($id);
+
+            $translation = ReviewTranslation::firstOrNew([
+                'origin_id' => $review->id,
+                'locale'    => $lang,
+            ]);
+            $translation->title        = (string) $request->input('title', '');
+            $translation->content      = (string) $request->input('content', '');
+            $translation->trip_summary = (string) $request->input('trip_summary', '');
+            $translation->agent_role   = (string) $request->input('agent_role', '');
+            $translation->save();
+
+            // Cache invalidation so public listings re-render with new translation
+            if ($review->object_id && $review->object_model) {
+                Cache::forget("review_" . $review->object_model . "_" . $review->object_id);
+            }
+
+            if ($request->wantsJson() || $request->expectsJson()) {
+                return response()->json([
+                    'success'     => true,
+                    'message'     => "Review translation ({$lang}) saved",
+                    'data'        => $this->transformReview($review->fresh()),
+                    'translation' => $translation->fresh()->toArray(),
+                ]);
+            }
+
+            return \Illuminate\Support\Facades\Redirect::route('review.admin.index')
+                ->with('success', "Review translation ({$lang}) saved");
+        }
+
+        // Default-locale save (origin row)
         $request->validate([
             'title' => 'required|string|max:255',
             'content' => 'required|string',
             'rating' => 'required|numeric|min:1|max:5',
             'author_name' => 'required|string|max:255',
         ]);
-        
+
         if ($id) {
             $review = Review::findOrFail($id);
         } else {
             $review = new Review();
             $review->author_id = auth()->id();
         }
-        
+
         // Basic fields
         $review->title = $request->input('title');
         $review->content = $request->input('content');

@@ -7,11 +7,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Review\Models\ReviewMeta;
+use Modules\Review\Models\ReviewTranslation;
 
 class Review extends BaseModel
 {
     use SoftDeletes;
     protected $table = 'bc_review';
+    protected $translation_class = ReviewTranslation::class;
     protected $trackUser = false;
     protected $fillable = [
         'object_id',

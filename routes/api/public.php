@@ -900,8 +900,23 @@ Route::prefix('reviews')->group(function () {
             $reviews = $query->orderBy('created_at', 'desc')
                 ->paginate($request->input('per_page', 20));
 
+            // Bulk-load translations for the requested locale to avoid N+1 lookups.
+            $lang = $request->query('lang');
+            $translationsById = [];
+            if (!empty($lang) && function_exists('is_default_lang') && !is_default_lang($lang)) {
+                $ids = $reviews->getCollection()->pluck('id')->all();
+                if (!empty($ids)) {
+                    $translationsById = \Modules\Review\Models\ReviewTranslation::query()
+                        ->whereIn('origin_id', $ids)
+                        ->where('locale', $lang)
+                        ->get()
+                        ->keyBy('origin_id')
+                        ->toArray();
+                }
+            }
+
             // Transform to match frontend expectations
-            $data = $reviews->getCollection()->map(function ($review) {
+            $data = $reviews->getCollection()->map(function ($review) use ($translationsById) {
                 // Get Meta
                 $meta = \Modules\Review\Models\ReviewMeta::where('review_id', $review->id)->pluck('val', 'name')->toArray();
 
@@ -939,6 +954,14 @@ Route::prefix('reviews')->group(function () {
                     }
                 }
 
+                // Translation overlay: when ?lang=xx and a translation row exists, prefer
+                // the translated text for translatable fields. Fall back to origin otherwise.
+                $tr = $translationsById[$review->id] ?? null;
+                $title       = ($tr && !empty($tr['title']))        ? $tr['title']        : ($review->title ?? '');
+                $content     = ($tr && !empty($tr['content']))      ? $tr['content']      : ($review->content ?? '');
+                $tripSummary = ($tr && !empty($tr['trip_summary'])) ? $tr['trip_summary'] : ($review->trip_summary ?? null);
+                $agentRole   = ($tr && !empty($tr['agent_role']))   ? $tr['agent_role']   : ($review->agent_role ?? null);
+
                 return [
                     'id' => $review->id,
                     'object_id' => $review->object_id,
@@ -947,9 +970,9 @@ Route::prefix('reviews')->group(function () {
                     'tour_name' => $tourName,
                     'tour_slug' => $tourLink,
                     'rating' => $review->rate_number ?? $review->rating ?? 5,
-                    'title' => $review->title ?? '',
-                    'content' => $review->content ?? '',
-                    'full_review' => $review->content ?? '',
+                    'title' => $title,
+                    'content' => $content,
+                    'full_review' => $content,
                     'status' => $review->status,
                     'created_at' => $review->created_at,
 
@@ -962,7 +985,8 @@ Route::prefix('reviews')->group(function () {
                     'author_country' => $review->author_country ?? $meta['author_country'] ?? null,
                     'review_source' => $review->review_source ?? $meta['review_source'] ?? 'website',
                     'date' => $review->review_date ?? $meta['review_date'] ?? $review->created_at->format('Y-m-d'),
-                    'trip_summary' => $review->trip_summary ?? null, // Added for completeness
+                    'trip_summary' => $tripSummary,
+                    'agent_role' => $agentRole,
 
                     'images' => $images,
                     'image' => $mainImage ?? $tourImage
@@ -981,8 +1005,8 @@ Route::prefix('reviews')->group(function () {
     });
 
 
-    // Get reviews for a specific tour/object (public)
-    Route::get('/{objectModel}/{objectId}', function ($objectModel, $objectId) {
+    // Get reviews for a specific tour/object (public) — locale-aware
+    Route::get('/{objectModel}/{objectId}', function ($objectModel, $objectId, Request $request) {
         try {
             $reviews = DB::table('bc_review')
                 ->where('object_model', $objectModel)
@@ -991,6 +1015,28 @@ Route::prefix('reviews')->group(function () {
                 ->orderBy('created_at', 'desc')
                 ->limit(10)
                 ->get();
+
+            // Apply translation overlay when ?lang=xx is non-default
+            $lang = $request->query('lang');
+            if (!empty($lang) && function_exists('is_default_lang') && !is_default_lang($lang) && $reviews->isNotEmpty()) {
+                $ids = $reviews->pluck('id')->all();
+                $translations = \Modules\Review\Models\ReviewTranslation::query()
+                    ->whereIn('origin_id', $ids)
+                    ->where('locale', $lang)
+                    ->get()
+                    ->keyBy('origin_id');
+
+                $reviews = $reviews->map(function ($r) use ($translations) {
+                    $tr = $translations->get($r->id);
+                    if ($tr) {
+                        if (!empty($tr->title))        $r->title        = $tr->title;
+                        if (!empty($tr->content))      $r->content      = $tr->content;
+                        if (!empty($tr->trip_summary)) $r->trip_summary = $tr->trip_summary;
+                        if (!empty($tr->agent_role))   $r->agent_role   = $tr->agent_role;
+                    }
+                    return $r;
+                });
+            }
 
             return response()->json(['data' => $reviews]);
         } catch (\Exception $e) {
