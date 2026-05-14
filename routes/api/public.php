@@ -1654,13 +1654,38 @@ Route::prefix('news')->group(function () {
                 ];
             });
 
+            // Translate location name
+            $locationTr = ($lang && !is_default_lang($lang) && $post->location)
+                ? $post->location->forceTranslate($lang)
+                : null;
+
+            // Locale-aware SEO meta lookup. Admin saves per-locale SEO via
+            // $translation->saveSEO($request, $lang) which writes a bc_seo row
+            // keyed by (object_id=$translation->id, object_model="news_translation_{lang}").
+            // Falls back through: per-locale SEO → translation title/excerpt →
+            // origin SEO → origin title.
+            $seoMeta = null;
+            if ($translation && $translation->id) {
+                $seoMeta = \Modules\Core\Models\SEO::where('object_id', $translation->id)
+                    ->where('object_model', 'news_translation_' . $lang)
+                    ->first();
+            }
+            $originSeo = $post->getSeoMeta();
+            $metaTitle = ($seoMeta && $seoMeta->seo_title)
+                ? $seoMeta->seo_title
+                : (($translation && $translation->title) ? $translation->title : (($originSeo['seo_title'] ?? null) ?: ($post->meta_title ?: $post->title)));
+            $metaDesc = ($seoMeta && $seoMeta->seo_desc)
+                ? $seoMeta->seo_desc
+                : (($translation && $translation->excerpt) ? $translation->excerpt : (($originSeo['seo_desc'] ?? null) ?: ($post->meta_desc ?: $post->short_desc ?: $post->excerpt)));
+
             return response()->json([
                 'data' => [
                     'id' => $post->id,
-                    'title' => $translation->title ?? $post->title,
+                    'title' => ($translation && $translation->title) ? $translation->title : $post->title,
                     'slug' => $post->slug,
-                    'content' => $translation->content ?? $post->content,
-                    'excerpt' => $translation->excerpt ?? $post->excerpt,
+                    'content' => ($translation && $translation->content) ? $translation->content : $post->content,
+                    'excerpt' => ($translation && $translation->excerpt) ? $translation->excerpt : $post->excerpt,
+                    'short_desc' => ($translation && $translation->short_desc) ? $translation->short_desc : $post->short_desc,
                     'image_url' => $getImageUrl($post->image_id),
                     'image_alt' => $post->image_alt ?? null,
                     'cat_id' => $post->cat_id,
@@ -1668,7 +1693,7 @@ Route::prefix('news')->group(function () {
                     'tags' => $tags,
                     'location' => $post->location ? [
                         'id' => $post->location->id,
-                        'name' => $post->location->name,
+                        'name' => ($locationTr && $locationTr->name) ? $locationTr->name : $post->location->name,
                         'slug' => $post->location->slug,
                     ] : null,
                     'author' => $author,
@@ -1676,12 +1701,18 @@ Route::prefix('news')->group(function () {
                     'reading_time' => $post->reading_time ?? null,
                     'publish_date' => $post->publish_date ? $post->publish_date->format('Y-m-d') : ($post->created_at ? $post->created_at->format('Y-m-d') : null),
                     'created_at' => $post->created_at,
-                    // Duplicate key removal: 'created_at' => $post->created_at,
-                    'og_title' => $post->og_title,
-                    'og_description' => $post->og_description,
+
+                    // SEO metadata — locale-aware fallback chain
+                    'meta_title' => $metaTitle,
+                    'meta_desc' => $metaDesc,
+                    'meta_keywords' => ($seoMeta && $seoMeta->seo_keywords) ? $seoMeta->seo_keywords : $post->meta_keywords,
+
+                    // OG / Twitter — prefer per-locale SEO → admin's origin OG/Twitter → translated meta
+                    'og_title' => ($seoMeta && $seoMeta->og_title) ? $seoMeta->og_title : ($post->og_title ?: $metaTitle),
+                    'og_description' => ($seoMeta && $seoMeta->og_description) ? $seoMeta->og_description : ($post->og_description ?: $metaDesc),
                     'og_image_url' => $post->og_image_id ? parse_url(get_file_url($post->og_image_id, 'full'), PHP_URL_PATH) : null,
-                    'twitter_title' => $post->twitter_title,
-                    'twitter_description' => $post->twitter_description,
+                    'twitter_title' => ($seoMeta && $seoMeta->twitter_title) ? $seoMeta->twitter_title : ($post->twitter_title ?: $metaTitle),
+                    'twitter_description' => ($seoMeta && $seoMeta->twitter_description) ? $seoMeta->twitter_description : ($post->twitter_description ?: $metaDesc),
                     'twitter_image_url' => $post->twitter_image_id ? parse_url(get_file_url($post->twitter_image_id, 'full'), PHP_URL_PATH) : null,
                     'twitter_card' => $post->twitter_card,
                     'canonical_url' => $post->canonical_url,

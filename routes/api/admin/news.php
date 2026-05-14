@@ -200,6 +200,15 @@ Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
             // Include translation if fetched
             if ($translation) {
                 $responseData['translation'] = $translation;
+
+                // Per-locale SEO row so the admin form pre-fills SEO fields
+                // with previously saved translated values.
+                $translationSeo = \Modules\Core\Models\SEO::where('object_id', $translation->id)
+                    ->where('object_model', 'news_translation_' . $lang)
+                    ->first();
+                if ($translationSeo) {
+                    $responseData['translation_seo'] = $translationSeo;
+                }
             }
 
             return response()->json($responseData);
@@ -305,7 +314,12 @@ Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
                         $seoRequest = new Request([
                             'seo_title' => $request->input('meta_title'),
                             'seo_desc' => $request->input('meta_desc'),
+                            'seo_keywords' => $request->input('meta_keywords'),
                             'seo_image' => $request->input('og_image_id') ?: $request->input('image_id'),
+                            'og_title' => $request->input('og_title'),
+                            'og_description' => $request->input('og_description'),
+                            'twitter_title' => $request->input('twitter_title'),
+                            'twitter_description' => $request->input('twitter_description'),
                         ]);
                         $post->saveSEO($seoRequest);
                     }
@@ -314,8 +328,27 @@ Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
                     $post->forceSaveTranslation($lang ?: 'en', $request->input());
                     $message = 'Post saved successfully';
                 } else {
-                    // Just save translation (bypass multi-lang gate)
-                    $post->forceSaveTranslation($lang, $request->input());
+                    // Save translation row (bypass multi-lang gate)
+                    $translation = $post->forceSaveTranslation($lang, $request->input());
+
+                    // Persist per-locale SEO so admin's edits to seo/og/twitter
+                    // on the translation tab actually save and flow to the
+                    // public page. bc_seo row keyed by:
+                    //   object_id = $translation->id
+                    //   object_model = "news_translation_{lang}"
+                    if ($translation) {
+                        $seoRequest = new Request([
+                            'seo_title' => $request->input('meta_title'),
+                            'seo_desc' => $request->input('meta_desc'),
+                            'seo_keywords' => $request->input('meta_keywords'),
+                            'seo_image' => $request->input('og_image_id') ?: $request->input('image_id'),
+                            'og_title' => $request->input('og_title'),
+                            'og_description' => $request->input('og_description'),
+                            'twitter_title' => $request->input('twitter_title'),
+                            'twitter_description' => $request->input('twitter_description'),
+                        ]);
+                        $translation->saveSEO($seoRequest, $lang);
+                    }
                     $message = 'Translation saved successfully';
                 }
                 
