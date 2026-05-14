@@ -1341,7 +1341,7 @@ Route::prefix('news')->group(function () {
                 return [
                     'id' => $post->id,
                     'title' => $translation->title ?? $post->title,
-                    'slug' => $post->slug,
+                    'slug' => ($translation && $translation->slug) ? $translation->slug : $post->slug,
                     'content' => $translation->content ?? $post->content,
                     'excerpt' => $translation->excerpt ?? $post->excerpt,
                     'status' => $post->status,
@@ -1455,7 +1455,7 @@ Route::prefix('news')->group(function () {
                 return [
                     'id' => $post->id,
                     'title' => $translation->title ?? $post->title,
-                    'slug' => $post->slug,
+                    'slug' => ($translation && $translation->slug) ? $translation->slug : $post->slug,
                     'content' => $translation->content ?? $post->content,
                     'excerpt' => $translation->excerpt ?? $post->excerpt,
                     'is_featured' => $post->is_featured,
@@ -1857,6 +1857,7 @@ Route::prefix('pages')->group(function () {
                 $translation = $page->forceTranslate($lang);
                 if ($translation) {
                     $pageData['title'] = $translation->title ?: $pageData['title'];
+                    $pageData['slug'] = $translation->slug ?: $pageData['slug'];
                     $pageData['content'] = $translation->content ?: $pageData['content'];
                     $pageData['short_desc'] = $translation->short_desc ?: $pageData['short_desc'];
                     $pageData['banner_title'] = $translation->banner_title ?: $pageData['banner_title'];
@@ -1893,9 +1894,29 @@ Route::prefix('pages')->group(function () {
     // Get page by slug (must be last due to wildcard)
     Route::get('/{slug}', function (Request $request, $slug) {
         try {
-            $page = \Modules\Page\Models\Page::where('slug', $slug)
-                ->where('status', 'publish')
-                ->first();
+            $lang = $request->query('lang');
+            $page = null;
+            $translation = null;
+
+            // Resolve by per-locale translation slug first (allows /ar/<arabic-slug>)
+            if ($lang && !is_default_lang($lang)) {
+                $tr = \Modules\Page\Models\PageTranslation::where('slug', $slug)
+                    ->where('locale', $lang)
+                    ->first();
+                if ($tr) {
+                    $page = \Modules\Page\Models\Page::where('id', $tr->origin_id)
+                        ->where('status', 'publish')
+                        ->first();
+                    $translation = $tr;
+                }
+            }
+
+            // Fall back to origin slug
+            if (!$page) {
+                $page = \Modules\Page\Models\Page::where('slug', $slug)
+                    ->where('status', 'publish')
+                    ->first();
+            }
 
             if (!$page) {
                 return response()->json(['error' => 'Page not found'], 404);
@@ -1904,11 +1925,13 @@ Route::prefix('pages')->group(function () {
             $pageData = $page->toArray();
 
             // Handle Translations + locale-aware SEO
-            $lang = $request->query('lang');
             if ($lang && !is_default_lang($lang)) {
-                $translation = $page->forceTranslate($lang);
+                if (!$translation) {
+                    $translation = $page->forceTranslate($lang);
+                }
                 if ($translation) {
                     $pageData['title'] = $translation->title ?: $pageData['title'];
+                    $pageData['slug'] = $translation->slug ?: $pageData['slug'];
                     $pageData['content'] = $translation->content ?: $pageData['content'];
                     $pageData['short_desc'] = $translation->short_desc ?: $pageData['short_desc'];
                     $pageData['banner_title'] = $translation->banner_title ?: $pageData['banner_title'];
