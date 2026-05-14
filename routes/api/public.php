@@ -525,11 +525,14 @@ Route::prefix('tours')->group(function () {
                         'pricing_type' => $tour->pricing_type,
                         'min_people' => $tour->min_people,
                         'max_people' => $tour->max_people,
-                        'destination' => $tour->location ? [
-                            'id' => $tour->location->id,
-                            'name' => $tour->location->name,
-                            'slug' => $tour->location->slug,
-                        ] : null,
+                        'destination' => $tour->location ? (function () use ($tour, $lang) {
+                            $locTr = ($lang && !is_default_lang($lang)) ? $tour->location->forceTranslate($lang) : null;
+                            return [
+                                'id' => $tour->location->id,
+                                'name' => ($locTr && $locTr->name) ? $locTr->name : $tour->location->name,
+                                'slug' => $tour->location->slug,
+                            ];
+                        })() : null,
                         'categories' => $categories,
                         'tour_themes' => $themes,
                         // Legacy single category for compatibility (optional)
