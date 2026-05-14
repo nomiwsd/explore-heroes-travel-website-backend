@@ -1811,18 +1811,20 @@ Route::prefix('pages')->group(function () {
             return response()->json([
                 'data' => $pages->map(function ($page) use ($needTranslation, $lang) {
                     $title = $page->title;
+                    $slug = $page->slug;
                     if ($needTranslation) {
                         $translation = $page->forceTranslate($lang);
-                        if ($translation && $translation->title) {
-                            $title = $translation->title;
+                        if ($translation) {
+                            if ($translation->title) $title = $translation->title;
+                            if ($translation->slug) $slug = $translation->slug;
                         }
                     }
 
                     return [
                         'id' => $page->id,
                         'title' => $title,
-                        'slug' => $page->slug,
-                        'url' => $page->slug === 'home' ? '/' : '/' . $page->slug,
+                        'slug' => $slug,
+                        'url' => $slug === 'home' ? '/' : '/' . $slug,
                     ];
                 })
             ]);
