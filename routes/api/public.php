@@ -512,11 +512,15 @@ Route::prefix('tours')->group(function () {
                         }
                     }
 
+                    // Use translation values only when non-empty; otherwise fall back to origin
+                    $trTitle = $translation && !empty($translation->title) ? $translation->title : $tour->title;
+                    $trShortDesc = $translation && !empty($translation->short_desc) ? $translation->short_desc : $tour->short_desc;
+
                     return [
                         'id' => $tour->id,
-                        'title' => $translation->title ?? $tour->title,
+                        'title' => $trTitle,
                         'slug' => $tour->slug,
-                        'short_description' => $translation->short_desc ?? $tour->short_desc,
+                        'short_description' => $trShortDesc,
                         'price' => $tour->price,
                         'sale_price' => $tour->sale_price,
                         'duration' => $tour->duration,
