@@ -176,7 +176,13 @@ class TourController extends AdminController
             }
             return redirect(route('tour.admin.index'));
         }
-        $translation = $row->translate($request->query('lang', get_main_lang()));
+        // Use forceTranslate so translation features work regardless of the
+        // site_enable_multi_lang setting. Falls back to null when no row exists,
+        // letting the frontend pre-fill the form with origin (English) values.
+        $reqLang = $request->query('lang', get_main_lang());
+        $translation = is_default_lang($reqLang)
+            ? null
+            : $row->forceTranslate($reqLang);
         if (!$this->hasPermission('tour_manage_others')) {
             if ($row->author_id != Auth::id()) {
                 if ($request->wantsJson() || $request->expectsJson()) {
@@ -248,16 +254,30 @@ class TourController extends AdminController
             $request->validate($rules);
         }
 
-        $row->fill($request->input());
-        if ($request->input('slug')) {
-            $row->slug = $request->input('slug');
+        $lang = $request->input('lang');
+        $isTranslation = $lang && !is_default_lang($lang);
+
+        if (!$isTranslation) {
+            // Default language → save origin row with all fields
+            $row->fill($request->input());
+            if ($request->input('slug')) {
+                $row->slug = $request->input('slug');
+            }
+            $row->ical_import_url = $request->ical_import_url;
+            $row->author_id = $request->input('author_id');
+            $row->default_state = $request->input('default_state', 1);
+            $row->enable_service_fee = $request->input('enable_service_fee');
+            $row->service_fee = $request->input('service_fee');
+            $res = $row->saveOriginOrTranslation($lang, true);
+        } else {
+            // Translation language → only persist the TourTranslation row.
+            // Use forceSaveTranslation so it works regardless of the
+            // site_enable_multi_lang setting.
+            $row->forceSaveTranslation($lang);
+            // Save SEO for this locale too
+            $row->saveSEO($request, $lang);
+            $res = true;
         }
-        $row->ical_import_url = $request->ical_import_url;
-        $row->author_id = $request->input('author_id');
-        $row->default_state = $request->input('default_state', 1);
-        $row->enable_service_fee = $request->input('enable_service_fee');
-        $row->service_fee = $request->input('service_fee');
-        $res = $row->saveOriginOrTranslation($request->input('lang'), true);
 
         if ($res) {
             TourLocation::where('tour_id', $row->id)->delete();

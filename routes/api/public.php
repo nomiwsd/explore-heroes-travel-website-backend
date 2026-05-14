@@ -450,9 +450,14 @@ Route::prefix('tours')->group(function () {
                 ->orderBy('created_at', 'desc')
                 ->paginate($perPage);
 
+            $needTranslation = $lang && !is_default_lang($lang);
             return response()->json([
-                'data' => $tours->map(function ($tour) use ($lang) {
-                    $translation = $lang ? $tour->forceTranslate($lang) : null;
+                'data' => $tours->map(function ($tour) use ($lang, $needTranslation) {
+                    $translation = $needTranslation ? $tour->forceTranslate($lang) : null;
+                    // Translate location (destination) name
+                    $locationTranslation = ($needTranslation && $tour->location)
+                        ? $tour->location->forceTranslate($lang)
+                        : null;
                     // Fetch categories (translated)
                     $categories = collect([]);
                      if (!empty($tour->category_ids)) {
@@ -525,14 +530,11 @@ Route::prefix('tours')->group(function () {
                         'pricing_type' => $tour->pricing_type,
                         'min_people' => $tour->min_people,
                         'max_people' => $tour->max_people,
-                        'destination' => $tour->location ? (function () use ($tour, $lang) {
-                            $locTr = ($lang && !is_default_lang($lang)) ? $tour->location->forceTranslate($lang) : null;
-                            return [
-                                'id' => $tour->location->id,
-                                'name' => ($locTr && $locTr->name) ? $locTr->name : $tour->location->name,
-                                'slug' => $tour->location->slug,
-                            ];
-                        })() : null,
+                        'destination' => $tour->location ? [
+                            'id' => $tour->location->id,
+                            'name' => ($locationTranslation && $locationTranslation->name) ? $locationTranslation->name : $tour->location->name,
+                            'slug' => $tour->location->slug,
+                        ] : null,
                         'categories' => $categories,
                         'tour_themes' => $themes,
                         // Legacy single category for compatibility (optional)
@@ -723,15 +725,14 @@ Route::prefix('tours')->group(function () {
                     // map_embed removed
                     'map_image_url' => $tour->map_image_id ? parse_url(get_file_url($tour->map_image_id, 'full'), PHP_URL_PATH) : null,
                     'is_featured' => $tour->is_featured,
-                    'destination' => $tour->location ? (function () use ($tour, $lang) {
-                        $locTr = ($lang && !is_default_lang($lang)) ? $tour->location->forceTranslate($lang) : null;
-                        return [
-                            'id' => $tour->location->id,
-                            'name' => ($locTr && $locTr->name) ? $locTr->name : $tour->location->name,
-                            'slug' => $tour->location->slug,
-                            'image_url' => $tour->location->image_id ? parse_url(get_file_url($tour->location->image_id, 'full'), PHP_URL_PATH) : null,
-                        ];
-                    })() : null,
+                    'destination' => $tour->location ? [
+                        'id' => $tour->location->id,
+                        'name' => ($lang && !is_default_lang($lang) && ($locTr = $tour->location->forceTranslate($lang)) && $locTr->name)
+                            ? $locTr->name
+                            : $tour->location->name,
+                        'slug' => $tour->location->slug,
+                        'image_url' => $tour->location->image_id ? parse_url(get_file_url($tour->location->image_id, 'full'), PHP_URL_PATH) : null,
+                    ] : null,
                     'categories' => $categories,
                     // gallery removed
                     'hero_slider' => $hero_slider,
