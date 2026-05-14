@@ -12,6 +12,13 @@ class SEO extends BaseModel
         'seo_desc',
         'seo_image',
         'seo_share',
+        // Extended for per-locale OG / Twitter overrides (admin can translate them
+        // separately from the origin tour row's og_title / twitter_title columns).
+        'seo_keywords',
+        'og_title',
+        'og_description',
+        'twitter_title',
+        'twitter_description',
     ];
 
     protected $casts = [

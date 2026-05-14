@@ -582,6 +582,24 @@ Route::prefix('tours')->group(function () {
             $childPolicy = ($translation && $translation->child_policy) ? $translation->child_policy : $tour->child_policy;
             $paymentTerms = ($translation && $translation->payment_terms) ? $translation->payment_terms : $tour->payment_terms;
 
+            // Locale-aware SEO meta lookup.
+            // Admin saves per-locale SEO via $translation->saveSEO($request, $lang),
+            // which writes a bc_seo row keyed by (object_id=$translation->id,
+            // object_model="tour_translation_{lang}"). Fall back through:
+            // per-locale SEO → translation title/desc → origin SEO → origin title/desc.
+            $seoMeta = null;
+            if ($translation && $translation->id) {
+                $seoMeta = \Modules\Core\Models\SEO::where('object_id', $translation->id)
+                    ->where('object_model', 'tour_translation_' . $lang)
+                    ->first();
+            }
+            $metaTitle = ($seoMeta && $seoMeta->seo_title)
+                ? $seoMeta->seo_title
+                : ($translation && $translation->title ? $translation->title : ($tour->seo_title ?: $tour->title));
+            $metaDescription = ($seoMeta && $seoMeta->seo_desc)
+                ? $seoMeta->seo_desc
+                : ($translation && $translation->short_desc ? $translation->short_desc : ($tour->seo_desc ?: $tour->short_desc));
+
             // Get itinerary (check translation first)
             $itinerary = [];
             $itinerarySrc = ($translation && $translation->itinerary) ? $translation->itinerary : $tour->itinerary;
@@ -754,14 +772,23 @@ Route::prefix('tours')->group(function () {
                     'cancellation_policy' => $cancellationPolicy,
                     'child_policy' => $childPolicy,
                     'payment_terms' => $paymentTerms,
-                    'meta_title' => $tour->seo_title,
-                    'meta_description' => $tour->seo_desc,
-                    // OG/Twitter fields kept if defined in interface or likely needed for SEO Head
-                    'og_title' => $tour->og_title,
-                    'og_description' => $tour->og_description,
+                    'meta_title' => $metaTitle,
+                    'meta_description' => $metaDescription,
+                    // OG / Twitter — prefer per-locale SEO overrides → admin's
+                    // origin OG/Twitter columns → translated meta title/description.
+                    'og_title' => ($seoMeta && $seoMeta->og_title)
+                        ? $seoMeta->og_title
+                        : ($tour->og_title ?: $metaTitle),
+                    'og_description' => ($seoMeta && $seoMeta->og_description)
+                        ? $seoMeta->og_description
+                        : ($tour->og_description ?: $metaDescription),
                     'og_image_url' => $tour->og_image_id ? parse_url(get_file_url($tour->og_image_id, 'full'), PHP_URL_PATH) : null,
-                    'twitter_title' => $tour->twitter_title,
-                    'twitter_description' => $tour->twitter_description,
+                    'twitter_title' => ($seoMeta && $seoMeta->twitter_title)
+                        ? $seoMeta->twitter_title
+                        : ($tour->twitter_title ?: $metaTitle),
+                    'twitter_description' => ($seoMeta && $seoMeta->twitter_description)
+                        ? $seoMeta->twitter_description
+                        : ($tour->twitter_description ?: $metaDescription),
                     'twitter_image_url' => $tour->twitter_image_id ? get_file_url($tour->twitter_image_id, 'full') : null,
                     'twitter_card' => $tour->twitter_card,
                     'canonical_url' => $tour->canonical_url,

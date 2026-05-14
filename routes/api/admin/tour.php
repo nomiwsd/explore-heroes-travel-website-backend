@@ -502,6 +502,16 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
             // Include translation if fetched
             if ($translation) {
                 $responseData['translation'] = $translation;
+
+                // Also include the per-locale SEO row so the admin form pre-fills
+                // its SEO fields with previously saved translated values (and
+                // not the English ones from the origin row).
+                $translationSeo = \Modules\Core\Models\SEO::where('object_id', $translation->id)
+                    ->where('object_model', 'tour_translation_' . $lang)
+                    ->first();
+                if ($translationSeo) {
+                    $responseData['translation_seo'] = $translationSeo;
+                }
             }
 
             return response()->json($responseData);
@@ -548,12 +558,21 @@ Route::prefix('module/tour')->middleware('auth:sanctum')->group(function () {
             // Use forceSaveTranslation to bypass multi-lang gate
             if ($isTranslation) {
                 // For translations, don't save the main tour, only save translation
-                $tour->forceSaveTranslation($lang, $request->input());
+                $translation = $tour->forceSaveTranslation($lang, $request->input());
+                // Persist per-locale SEO (object_model = tour_translation_{lang})
+                // so the admin's edits to seo_title/seo_desc/og/twitter on the
+                // translation tab survive — and the public API can serve them.
+                $translation->saveSEO($request, $lang);
                 $message = 'Translation saved successfully';
             } else {
                 // For default language, save both main tour and translation
                 $tour->save();
-                $tour->forceSaveTranslation($lang ?: 'en', $request->input());
+                $translation = $tour->forceSaveTranslation($lang ?: 'en', $request->input());
+                // Default-language SEO lives on the main tour columns (seo_title,
+                // og_title, etc.). Tour->fill() already set those, but also
+                // mirror them onto the translation row's SEO record so an
+                // unset Arabic edit can fall back to English.
+                $tour->saveSEO($request);
                 $message = $id ? 'Tour updated successfully' : 'Tour created successfully';
             }
             
