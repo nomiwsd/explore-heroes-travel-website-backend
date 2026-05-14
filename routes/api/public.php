@@ -720,12 +720,15 @@ Route::prefix('tours')->group(function () {
                     // map_embed removed
                     'map_image_url' => $tour->map_image_id ? parse_url(get_file_url($tour->map_image_id, 'full'), PHP_URL_PATH) : null,
                     'is_featured' => $tour->is_featured,
-                    'destination' => $tour->location ? [
-                        'id' => $tour->location->id,
-                        'name' => $tour->location->name,
-                        'slug' => $tour->location->slug,
-                        'image_url' => $tour->location->image_id ? parse_url(get_file_url($tour->location->image_id, 'full'), PHP_URL_PATH) : null,
-                    ] : null,
+                    'destination' => $tour->location ? (function () use ($tour, $lang) {
+                        $locTr = ($lang && !is_default_lang($lang)) ? $tour->location->forceTranslate($lang) : null;
+                        return [
+                            'id' => $tour->location->id,
+                            'name' => ($locTr && $locTr->name) ? $locTr->name : $tour->location->name,
+                            'slug' => $tour->location->slug,
+                            'image_url' => $tour->location->image_id ? parse_url(get_file_url($tour->location->image_id, 'full'), PHP_URL_PATH) : null,
+                        ];
+                    })() : null,
                     'categories' => $categories,
                     // gallery removed
                     'hero_slider' => $hero_slider,
@@ -766,12 +769,21 @@ Route::prefix('tours')->group(function () {
                         'avatar' => $tour->tourExpert->avatar_id ? get_file_url($tour->tourExpert->avatar_id, 'thumb') : null,
                     ] : null,
                     // author removed
-                    'related_tours' => $relatedTours->map(function ($t) {
+                    'related_tours' => $relatedTours->map(function ($t) use ($lang) {
+                        $relatedTr = ($lang && !is_default_lang($lang)) ? $t->forceTranslate($lang) : null;
                         $relatedCategories = collect([]);
                         if (!empty($t->category_ids)) {
                             $catIds = is_string($t->category_ids) ? json_decode($t->category_ids, true) : $t->category_ids;
                             if (is_array($catIds) && count($catIds) > 0) {
-                                $relatedCategories = \Modules\Tour\Models\TourCategory::whereIn('id', $catIds)->select('id', 'name', 'slug')->get();
+                                $relatedCategories = \Modules\Tour\Models\TourCategory::whereIn('id', $catIds)->get(['id', 'name', 'slug'])
+                                    ->map(function ($c) use ($lang) {
+                                        $cTr = ($lang && !is_default_lang($lang)) ? $c->forceTranslate($lang) : null;
+                                        return [
+                                            'id' => $c->id,
+                                            'name' => ($cTr && $cTr->name) ? $cTr->name : $c->name,
+                                            'slug' => $c->slug,
+                                        ];
+                                    });
                             }
                         }
 
@@ -794,9 +806,10 @@ Route::prefix('tours')->group(function () {
                             }
                         }
 
+                        $relLocTr = ($lang && !is_default_lang($lang) && $t->location) ? $t->location->forceTranslate($lang) : null;
                         return [
                             'id' => $t->id,
-                            'title' => $t->title,
+                            'title' => ($relatedTr && $relatedTr->title) ? $relatedTr->title : $t->title,
                             'slug' => $t->slug,
                             'price' => $t->price,
                             'sale_price' => $t->sale_price,
@@ -807,7 +820,7 @@ Route::prefix('tours')->group(function () {
                             'image_url' => $imageUrl,
                             'destination' => $t->location ? [
                                 'id' => $t->location->id,
-                                'name' => $t->location->name,
+                                'name' => ($relLocTr && $relLocTr->name) ? $relLocTr->name : $t->location->name,
                                 'slug' => $t->location->slug,
                             ] : null,
                             'categories' => $relatedCategories,
