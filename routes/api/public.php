@@ -585,18 +585,37 @@ Route::prefix('tours')->group(function () {
     // Get single tour by slug
     Route::get('/{slug}', function (Request $request, $slug) {
         try {
-            $tour = Tour::where('slug', $slug)
-                ->where('status', 'publish')
-                ->first();
+            $lang = $request->query('lang');
+            $tour = null;
+            $translation = null;
+
+            // If a translation locale is supplied, first try to resolve the
+            // tour by its per-locale slug. This lets /ar/tours/<arabic-slug>
+            // work — and we fall back to the origin slug below so existing
+            // URLs (and language-switch swaps that haven't been resaved yet)
+            // keep working.
+            if ($lang && !is_default_lang($lang)) {
+                $tr = \Modules\Tour\Models\TourTranslation::where('slug', $slug)
+                    ->where('locale', $lang)
+                    ->first();
+                if ($tr) {
+                    $tour = Tour::where('id', $tr->origin_id)->where('status', 'publish')->first();
+                    $translation = $tr;
+                }
+            }
+
+            if (!$tour) {
+                $tour = Tour::where('slug', $slug)
+                    ->where('status', 'publish')
+                    ->first();
+            }
 
             if (!$tour) {
                 return response()->json(['error' => 'Tour not found'], 404);
             }
 
-            // Get translation if lang parameter is provided
-            $lang = $request->query('lang');
-            $translation = null;
-            if ($lang && !is_default_lang($lang)) {
+            // If we haven't already loaded the translation via slug lookup, do it now.
+            if (!$translation && $lang && !is_default_lang($lang)) {
                 $translation = $tour->forceTranslate($lang);
             }
 

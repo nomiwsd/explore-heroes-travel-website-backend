@@ -12,13 +12,18 @@ class NewsTranslation extends BaseModel
     protected $table = 'core_news_translations';
 
     protected $fillable = [
+        // Required for translation lookup/save
+        'origin_id',
+        'locale',
+
+        // Per-locale URL slug (e.g. /ar/blogs/<arabic-slug>)
+        'slug',
+
         // Text fields that need translation
         'title',
         'content',
         'short_desc',
         'excerpt',
-        'origin_id',
-        'locale'
     ];
 
     protected $seo_type = 'news_translation';

@@ -12,15 +12,18 @@ class PageTranslation extends BaseModel
     protected $table = 'core_page_translations';
 
     protected $fillable = [
+        // Required for translation relation
+        'origin_id',
+        'locale',
+
+        // Per-locale URL slug (e.g. /ar/<arabic-slug>)
+        'slug',
+
         // Text fields that need translation
         'title',
         'content',
         'short_desc',
         'banner_title',
-
-        // Required for translation relation
-        'origin_id',
-        'locale',
     ];
 
     protected $seo_type = 'page_translation';

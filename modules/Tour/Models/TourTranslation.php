@@ -16,6 +16,9 @@ class TourTranslation extends BaseModel
         'origin_id',
         'locale',
 
+        // Per-locale URL slug (e.g. /ar/tours/<arabic-slug>)
+        'slug',
+
         // Text fields that need translation
         'title',
         'short_desc',
