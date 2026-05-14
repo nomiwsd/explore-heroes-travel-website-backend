@@ -136,6 +136,15 @@ Route::prefix('module/location')->middleware('auth:sanctum')->group(function () 
             // Include translation if fetched
             if ($translation) {
                 $responseData['translation'] = $translation;
+
+                // Also include the per-locale SEO row so the admin form pre-fills
+                // its SEO fields with previously saved translated values.
+                $translationSeo = \Modules\Core\Models\SEO::where('object_id', $translation->id)
+                    ->where('object_model', 'location_translation_' . $lang)
+                    ->first();
+                if ($translationSeo) {
+                    $responseData['translation_seo'] = $translationSeo;
+                }
             }
 
             return response()->json($responseData);
@@ -173,12 +182,17 @@ Route::prefix('module/location')->middleware('auth:sanctum')->group(function () 
 
             if ($isTranslation) {
                 // For translations, don't save the main model, only save translation
-                $loc->forceSaveTranslation($lang, $request->input());
+                $translation = $loc->forceSaveTranslation($lang, $request->input());
+                // Persist per-locale SEO (object_model = location_translation_{lang})
+                // so admin's seo_title / seo_desc / og / twitter edits on the
+                // translation tab actually save and flow to the public page.
+                $translation->saveSEO($request, $lang);
                 $message = 'Translation saved successfully';
             } else {
                 // For default language, save both main model and translation
                 $loc->save();
                 $loc->forceSaveTranslation($lang ?: 'en', $request->input());
+                $loc->saveSEO($request);
 
                 // Save tours only for main language/record
                 $tours = $request->input('assigned_tour_ids');

@@ -184,6 +184,23 @@ Route::prefix('destinations')->group(function () {
 
             $seo = $destination->getSeoMeta();
 
+            // Locale-aware SEO meta lookup (mirrors tour endpoint).
+            // Admin saves per-locale SEO via $translation->saveSEO($request, $lang),
+            // which writes a bc_seo row keyed by (object_id=$translation->id,
+            // object_model="location_translation_{lang}").
+            $seoMeta = null;
+            if ($lang && !is_default_lang($lang) && $translation && $translation->id) {
+                $seoMeta = \Modules\Core\Models\SEO::where('object_id', $translation->id)
+                    ->where('object_model', 'location_translation_' . $lang)
+                    ->first();
+            }
+            $metaTitle = ($seoMeta && $seoMeta->seo_title)
+                ? $seoMeta->seo_title
+                : (($translation && $translation->name) ? $translation->name : ($destination->seo_title ?: $destination->name));
+            $metaDescription = ($seoMeta && $seoMeta->seo_desc)
+                ? $seoMeta->seo_desc
+                : (($translation && $translation->short_description) ? $translation->short_description : ($destination->seo_desc ?: $destination->short_description));
+
             // Get assigned tours via pivot table
             $assignedTourIds = \Modules\Tour\Models\TourLocation::where('location_id', $destination->id)->pluck('tour_id');
 
@@ -226,13 +243,23 @@ Route::prefix('destinations')->group(function () {
                     'map_lat' => $destination->map_lat,
                     'map_lng' => $destination->map_lng,
                     'map_zoom' => $destination->map_zoom,
-                    'meta_title' => $translation->name ?? $seo['seo_title'] ?? $destination->name,
-                    'meta_description' => $translation->short_description ?? $seo['seo_desc'],
-                    'og_title' => $destination->og_title,
-                    'og_description' => $destination->og_description,
+                    'meta_title' => $metaTitle,
+                    'meta_description' => $metaDescription,
+                    // OG / Twitter — prefer per-locale SEO overrides → admin's
+                    // origin OG/Twitter columns → translated meta title/description.
+                    'og_title' => ($seoMeta && $seoMeta->og_title)
+                        ? $seoMeta->og_title
+                        : ($destination->og_title ?: $metaTitle),
+                    'og_description' => ($seoMeta && $seoMeta->og_description)
+                        ? $seoMeta->og_description
+                        : ($destination->og_description ?: $metaDescription),
                     'og_image_url' => $destination->og_image_id ? get_file_url($destination->og_image_id, 'full') : null,
-                    'twitter_title' => $destination->twitter_title,
-                    'twitter_description' => $destination->twitter_description,
+                    'twitter_title' => ($seoMeta && $seoMeta->twitter_title)
+                        ? $seoMeta->twitter_title
+                        : ($destination->twitter_title ?: $metaTitle),
+                    'twitter_description' => ($seoMeta && $seoMeta->twitter_description)
+                        ? $seoMeta->twitter_description
+                        : ($destination->twitter_description ?: $metaDescription),
                     'twitter_image_url' => $destination->twitter_image_id ? get_file_url($destination->twitter_image_id, 'full') : null,
                     'twitter_card' => $destination->twitter_card,
                     'canonical_url' => $destination->canonical_url,
