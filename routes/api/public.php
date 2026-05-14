@@ -148,7 +148,7 @@ Route::prefix('destinations')->group(function () {
                     return [
                         'id' => $dest->id,
                         'name' => $translation->name ?? $dest->name,
-                        'slug' => $dest->slug,
+                        'slug' => ($translation && $translation->slug) ? $translation->slug : $dest->slug,
                         'short_description' => $translation->short_description ?? ($dest->translate()->short_description ?? ($dest->content ? \Illuminate\Support\Str::limit(strip_tags($dest->content), 150) : null)),
                         'image_url' => $dest->image_id ? get_file_url($dest->image_id, 'full') : null,
                         'banner_image_url' => $dest->banner_image_id ? get_file_url($dest->banner_image_id, 'full') : null,
@@ -171,16 +171,35 @@ Route::prefix('destinations')->group(function () {
     // Get single destination by slug
     Route::get('/{slug}', function (Request $request, $slug) {
         try {
-            $destination = Location::where('slug', $slug)
-                ->where('status', 'publish')
-                ->first();
+            $lang = $request->query('lang');
+            $destination = null;
+            $translation = null;
+
+            // Resolve by per-locale translation slug first (allows /ar/destinations/<arabic-slug>)
+            if ($lang && !is_default_lang($lang)) {
+                $tr = \Modules\Location\Models\LocationTranslation::where('slug', $slug)
+                    ->where('locale', $lang)
+                    ->first();
+                if ($tr) {
+                    $destination = Location::where('id', $tr->origin_id)->where('status', 'publish')->first();
+                    $translation = $tr;
+                }
+            }
+
+            // Fall back to origin slug
+            if (!$destination) {
+                $destination = Location::where('slug', $slug)
+                    ->where('status', 'publish')
+                    ->first();
+            }
 
             if (!$destination) {
                 return response()->json(['error' => 'Destination not found'], 404);
             }
 
-            $lang = $request->query('lang');
-            $translation = $destination->forceTranslate($lang);
+            if (!$translation) {
+                $translation = $destination->forceTranslate($lang);
+            }
 
             $seo = $destination->getSeoMeta();
 
@@ -233,7 +252,7 @@ Route::prefix('destinations')->group(function () {
                 'data' => [
                     'id' => $destination->id,
                     'name' => $translation->name ?? $destination->name,
-                    'slug' => $destination->slug,
+                    'slug' => ($translation && $translation->slug) ? $translation->slug : $destination->slug,
                     'short_description' => $translation->short_description ?? $destination->short_description,
                     'content' => $translation->content ?? $destination->content,
                     'image_url' => $destination->image_id ? get_file_url($destination->image_id, 'full') : null,
@@ -546,7 +565,7 @@ Route::prefix('tours')->group(function () {
                     return [
                         'id' => $tour->id,
                         'title' => $trTitle,
-                        'slug' => $tour->slug,
+                        'slug' => ($translation && $translation->slug) ? $translation->slug : $tour->slug,
                         'short_description' => $trShortDesc,
                         'price' => $tour->price,
                         'sale_price' => $tour->sale_price,
@@ -771,7 +790,7 @@ Route::prefix('tours')->group(function () {
                 'data' => [
                     'id' => $tour->id,
                     'title' => $title,
-                    'slug' => $tour->slug,
+                    'slug' => ($translation && $translation->slug) ? $translation->slug : $tour->slug,
                     'short_description' => $shortDesc,
                     'price' => $tour->price,
                     'sale_price' => $tour->sale_price,
@@ -891,7 +910,7 @@ Route::prefix('tours')->group(function () {
                         return [
                             'id' => $t->id,
                             'title' => ($relatedTr && $relatedTr->title) ? $relatedTr->title : $t->title,
-                            'slug' => $t->slug,
+                            'slug' => ($relatedTr && $relatedTr->slug) ? $relatedTr->slug : $t->slug,
                             'price' => $t->price,
                             'sale_price' => $t->sale_price,
                             'duration' => $t->duration,
@@ -1550,19 +1569,37 @@ Route::prefix('news')->group(function () {
     // Get single post by slug
     Route::get('/{slug}', function (Request $request, $slug) {
         try {
-            $post = \Modules\News\Models\News::where('slug', $slug)
-                ->where('status', 'publish')
-                ->with(['location']) // Eager load location
-                ->first();
+            $lang = $request->query('lang');
+            $post = null;
+            $translation = null;
+
+            // Resolve by per-locale translation slug first (allows /ar/blogs/<arabic-slug>)
+            if ($lang && !is_default_lang($lang)) {
+                $tr = \Modules\News\Models\NewsTranslation::where('slug', $slug)
+                    ->where('locale', $lang)
+                    ->first();
+                if ($tr) {
+                    $post = \Modules\News\Models\News::where('id', $tr->origin_id)
+                        ->where('status', 'publish')
+                        ->with(['location'])
+                        ->first();
+                    $translation = $tr;
+                }
+            }
+
+            // Fall back to origin slug
+            if (!$post) {
+                $post = \Modules\News\Models\News::where('slug', $slug)
+                    ->where('status', 'publish')
+                    ->with(['location'])
+                    ->first();
+            }
 
             if (!$post) {
                 return response()->json(['error' => 'Post not found'], 404);
             }
 
-            // Get translation if lang param is provided
-            $lang = $request->query('lang');
-            $translation = null;
-            if ($lang && !is_default_lang($lang)) {
+            if (!$translation && $lang && !is_default_lang($lang)) {
                 $translation = $post->forceTranslate($lang);
             }
 
@@ -1701,7 +1738,7 @@ Route::prefix('news')->group(function () {
                 'data' => [
                     'id' => $post->id,
                     'title' => ($translation && $translation->title) ? $translation->title : $post->title,
-                    'slug' => $post->slug,
+                    'slug' => ($translation && $translation->slug) ? $translation->slug : $post->slug,
                     'content' => ($translation && $translation->content) ? $translation->content : $post->content,
                     'excerpt' => ($translation && $translation->excerpt) ? $translation->excerpt : $post->excerpt,
                     'short_desc' => ($translation && $translation->short_desc) ? $translation->short_desc : $post->short_desc,
