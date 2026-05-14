@@ -134,6 +134,15 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
 
             if ($translation) {
                 $responseData['translation'] = $translation;
+
+                // Per-locale SEO row so the admin form pre-fills SEO fields
+                // with previously saved translated values (not English).
+                $translationSeo = \Modules\Core\Models\SEO::where('object_id', $translation->id)
+                    ->where('object_model', 'page_translation_' . $lang)
+                    ->first();
+                if ($translationSeo) {
+                    $responseData['translation_seo'] = $translationSeo;
+                }
             }
 
             return response()->json($responseData);
@@ -220,25 +229,28 @@ Route::prefix('module/page')->middleware('auth:sanctum')->group(function () {
                 $page->update_user = auth()->id();
                 $page->save();
 
-                // Write to debug log
-                file_put_contents(storage_path('logs/page_debug.log'), "SAVED MAIN TABLE\n", FILE_APPEND);
-            } else {
-                // Write to debug log
-                file_put_contents(storage_path('logs/page_debug.log'), "SKIPPED MAIN TABLE SAVE\n", FILE_APPEND);
+                // Default-language SEO already lives on the main page columns
+                // (meta_title, og_title, etc.) and was set via fill() above.
+                // Also mirror to the per-locale SEO row keyed as "page" so a
+                // future read path that uses the SEO module sees it.
+                $page->saveSEO($request);
             }
 
             // Save translation (bypass multi-lang gate to ensure translations always persist)
-            $res = $page->forceSaveTranslation($lang ?: get_main_lang(), $request->input());
+            $translation = $page->forceSaveTranslation($lang ?: get_main_lang(), $request->input());
+
+            // For translation locale, persist per-locale SEO too. Writes a bc_seo
+            // row keyed by (object_id=$translation->id,
+            // object_model="page_translation_{lang}") so admin's edits to
+            // seo_title/seo_desc/og/twitter on the translation tab actually save.
+            if ($isTranslation && $translation) {
+                $translation->saveSEO($request, $lang);
+            }
 
             return response()->json([
                 'success' => true,
                 'data' => ['id' => $page->id],
                 'message' => $isTranslation ? 'Translation saved successfully' : 'Page saved successfully',
-                'debug' => [
-                    'lang' => $lang,
-                    'isTranslation' => $isTranslation,
-                    'mainTableSaved' => !$isTranslation,
-                ],
             ]);
         } catch (\Exception $e) {
             Log::error('Page store error: ' . $e->getMessage());

@@ -1764,15 +1764,32 @@ Route::prefix('pages')->group(function () {
 
             $pageData = $page->toArray();
 
-            // Handle Translations
+            // Handle Translations + locale-aware SEO
             $lang = $request->query('lang');
             if ($lang && !is_default_lang($lang)) {
                 $translation = $page->forceTranslate($lang);
                 if ($translation) {
-                    $pageData['title'] = $translation->title ?? $pageData['title'];
-                    $pageData['content'] = $translation->content ?? $pageData['content'];
-                    $pageData['short_desc'] = $translation->short_desc ?? $pageData['short_desc'];
-                    $pageData['banner_title'] = $translation->banner_title ?? $pageData['banner_title'];
+                    $pageData['title'] = $translation->title ?: $pageData['title'];
+                    $pageData['content'] = $translation->content ?: $pageData['content'];
+                    $pageData['short_desc'] = $translation->short_desc ?: $pageData['short_desc'];
+                    $pageData['banner_title'] = $translation->banner_title ?: $pageData['banner_title'];
+
+                    // Locale-aware SEO from bc_seo (object_model = page_translation_{lang})
+                    $seoMeta = $translation->id
+                        ? \Modules\Core\Models\SEO::where('object_id', $translation->id)
+                            ->where('object_model', 'page_translation_' . $lang)
+                            ->first()
+                        : null;
+                    $metaTitle = ($seoMeta && $seoMeta->seo_title) ? $seoMeta->seo_title : ($translation->title ?: $pageData['meta_title']);
+                    $metaDesc = ($seoMeta && $seoMeta->seo_desc) ? $seoMeta->seo_desc : ($translation->short_desc ?: $pageData['meta_desc']);
+                    $pageData['meta_title'] = $metaTitle;
+                    $pageData['meta_desc'] = $metaDesc;
+                    $pageData['seo_title'] = $metaTitle;
+                    $pageData['seo_description'] = $metaDesc;
+                    $pageData['og_title'] = ($seoMeta && $seoMeta->og_title) ? $seoMeta->og_title : ($pageData['og_title'] ?: $metaTitle);
+                    $pageData['og_description'] = ($seoMeta && $seoMeta->og_description) ? $seoMeta->og_description : ($pageData['og_description'] ?: $metaDesc);
+                    $pageData['twitter_title'] = ($seoMeta && $seoMeta->twitter_title) ? $seoMeta->twitter_title : ($pageData['twitter_title'] ?: $metaTitle);
+                    $pageData['twitter_description'] = ($seoMeta && $seoMeta->twitter_description) ? $seoMeta->twitter_description : ($pageData['twitter_description'] ?: $metaDesc);
                 }
             }
 
@@ -1799,15 +1816,32 @@ Route::prefix('pages')->group(function () {
 
             $pageData = $page->toArray();
 
-            // Handle Translations
+            // Handle Translations + locale-aware SEO
             $lang = $request->query('lang');
             if ($lang && !is_default_lang($lang)) {
                 $translation = $page->forceTranslate($lang);
                 if ($translation) {
-                    $pageData['title'] = $translation->title ?? $pageData['title'];
-                    $pageData['content'] = $translation->content ?? $pageData['content'];
-                    $pageData['short_desc'] = $translation->short_desc ?? $pageData['short_desc'];
-                    $pageData['banner_title'] = $translation->banner_title ?? $pageData['banner_title'];
+                    $pageData['title'] = $translation->title ?: $pageData['title'];
+                    $pageData['content'] = $translation->content ?: $pageData['content'];
+                    $pageData['short_desc'] = $translation->short_desc ?: $pageData['short_desc'];
+                    $pageData['banner_title'] = $translation->banner_title ?: $pageData['banner_title'];
+
+                    // Locale-aware SEO from bc_seo (object_model = page_translation_{lang})
+                    $seoMeta = $translation->id
+                        ? \Modules\Core\Models\SEO::where('object_id', $translation->id)
+                            ->where('object_model', 'page_translation_' . $lang)
+                            ->first()
+                        : null;
+                    $metaTitle = ($seoMeta && $seoMeta->seo_title) ? $seoMeta->seo_title : ($translation->title ?: $pageData['meta_title']);
+                    $metaDesc = ($seoMeta && $seoMeta->seo_desc) ? $seoMeta->seo_desc : ($translation->short_desc ?: $pageData['meta_desc']);
+                    $pageData['meta_title'] = $metaTitle;
+                    $pageData['meta_desc'] = $metaDesc;
+                    $pageData['seo_title'] = $metaTitle;
+                    $pageData['seo_description'] = $metaDesc;
+                    $pageData['og_title'] = ($seoMeta && $seoMeta->og_title) ? $seoMeta->og_title : ($pageData['og_title'] ?: $metaTitle);
+                    $pageData['og_description'] = ($seoMeta && $seoMeta->og_description) ? $seoMeta->og_description : ($pageData['og_description'] ?: $metaDesc);
+                    $pageData['twitter_title'] = ($seoMeta && $seoMeta->twitter_title) ? $seoMeta->twitter_title : ($pageData['twitter_title'] ?: $metaTitle);
+                    $pageData['twitter_description'] = ($seoMeta && $seoMeta->twitter_description) ? $seoMeta->twitter_description : ($pageData['twitter_description'] ?: $metaDesc);
                 }
             }
 
