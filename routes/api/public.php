@@ -193,6 +193,17 @@ Route::prefix('destinations')->group(function () {
                     ->first();
             }
 
+            // Last-resort: translated slug requested without `lang` (SSR first paint)
+            if (!$destination) {
+                $anyTr = \Modules\Location\Models\LocationTranslation::where('slug', $slug)->first();
+                if ($anyTr) {
+                    $destination = Location::where('id', $anyTr->origin_id)->where('status', 'publish')->first();
+                    if ($destination && !$translation) {
+                        $translation = $anyTr;
+                    }
+                }
+            }
+
             if (!$destination) {
                 return response()->json(['error' => 'Destination not found'], 404);
             }
@@ -627,6 +638,19 @@ Route::prefix('tours')->group(function () {
                 $tour = Tour::where('slug', $slug)
                     ->where('status', 'publish')
                     ->first();
+            }
+
+            // Last-resort: the slug may be a translated slug but `lang` wasn't
+            // passed (e.g. SSR first paint before the locale resolves on the
+            // client). Resolve by ANY locale's translation slug.
+            if (!$tour) {
+                $anyTr = \Modules\Tour\Models\TourTranslation::where('slug', $slug)->first();
+                if ($anyTr) {
+                    $tour = Tour::where('id', $anyTr->origin_id)->where('status', 'publish')->first();
+                    if ($tour && !$translation) {
+                        $translation = $anyTr;
+                    }
+                }
             }
 
             if (!$tour) {
@@ -1595,6 +1619,20 @@ Route::prefix('news')->group(function () {
                     ->first();
             }
 
+            // Last-resort: translated slug requested without `lang` (SSR first paint)
+            if (!$post) {
+                $anyTr = \Modules\News\Models\NewsTranslation::where('slug', $slug)->first();
+                if ($anyTr) {
+                    $post = \Modules\News\Models\News::where('id', $anyTr->origin_id)
+                        ->where('status', 'publish')
+                        ->with(['location'])
+                        ->first();
+                    if ($post && !$translation) {
+                        $translation = $anyTr;
+                    }
+                }
+            }
+
             if (!$post) {
                 return response()->json(['error' => 'Post not found'], 404);
             }
@@ -1918,6 +1956,19 @@ Route::prefix('pages')->group(function () {
                 $page = \Modules\Page\Models\Page::where('slug', $slug)
                     ->where('status', 'publish')
                     ->first();
+            }
+
+            // Last-resort: translated slug requested without `lang` (SSR first paint)
+            if (!$page) {
+                $anyTr = \Modules\Page\Models\PageTranslation::where('slug', $slug)->first();
+                if ($anyTr) {
+                    $page = \Modules\Page\Models\Page::where('id', $anyTr->origin_id)
+                        ->where('status', 'publish')
+                        ->first();
+                    if ($page && !$translation) {
+                        $translation = $anyTr;
+                    }
+                }
             }
 
             if (!$page) {
