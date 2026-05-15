@@ -28,6 +28,11 @@ class Settings extends BaseModel
         'footer_text_right',
         'address',
         'from_name',
+        // Global SEO meta — per-language so AR pages get AR title/description
+        'meta_description',
+        'meta_keywords',
+        'og_title',
+        'og_description',
         // Payment icons can be region-specific
         'payment_custom_icon_url',
         'payment_icon_apple_pay',

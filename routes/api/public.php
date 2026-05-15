@@ -2072,10 +2072,11 @@ Route::prefix('admin/page-settings')->middleware('auth:sanctum')->group(function
 // SEO API (Public Access)
 // =====================================================
 Route::prefix('module/core/seo')->group(function () {
-    // Global SEO Settings
-    Route::get('/global', function () {
+    // Global SEO Settings (locale-aware: ?lang=ar overlays AR meta)
+    Route::get('/global', function (Request $request) {
         try {
-            $settings = Settings::getSettings('seo');
+            $lang = $request->query('lang');
+            $settings = Settings::getSettings('seo', $lang);
             return response()->json($settings);
         } catch (\Exception $e) {
             return response()->json([]);

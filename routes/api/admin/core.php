@@ -409,11 +409,16 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
 
     Route::post('/global', function (Request $request) {
         try {
+            $lang = $request->query('lang') ?: $request->input('lang');
             $data = $request->all();
             foreach ($data as $key => $value) {
-                if ($key !== '_token') {
-                    Settings::store($key, $value, 'seo');
+                if ($key === '_token' || $key === 'lang') {
+                    continue;
                 }
+                // Settings::store() saves a per-locale row only for translatable
+                // keys (meta_description, og_title, etc.); global keys (analytics
+                // IDs, toggles, schema) ignore $lang and stay shared.
+                Settings::store($key, $value, 'seo', $lang);
             }
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
