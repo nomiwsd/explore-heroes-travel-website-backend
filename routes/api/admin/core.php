@@ -410,15 +410,28 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
     Route::post('/global', function (Request $request) {
         try {
             $lang = $request->query('lang') ?: $request->input('lang');
+            // Whitelist real global-SEO keys. Settings::getSettings() returns ALL
+            // rows (group is not a hard filter), so the admin GET leaks unrelated
+            // keys; persisting only known keys prevents garbage being re-saved.
+            $allowed = [
+                'site_title', 'meta_description', 'meta_keywords',
+                'og_title', 'og_description', 'og_image', 'og_type', 'favicon',
+                'twitter_card', 'twitter_username', 'twitter_image',
+                'canonical_url', 'canonical_rule',
+                'robots_index', 'robots_follow', 'robots_image_index',
+                'organization_schema', 'facebook_app_id',
+                'ga4_measurement_id', 'gtm_container_id', 'facebook_pixel_id',
+                'google_site_verification', 'facebook_domain_verification',
+            ];
             $data = $request->all();
-            foreach ($data as $key => $value) {
-                if ($key === '_token' || $key === 'lang') {
+            foreach ($allowed as $key) {
+                if (!array_key_exists($key, $data)) {
                     continue;
                 }
                 // Settings::store() saves a per-locale row only for translatable
                 // keys (meta_description, og_title, etc.); global keys (analytics
                 // IDs, toggles, schema) ignore $lang and stay shared.
-                Settings::store($key, $value, 'seo', $lang);
+                Settings::store($key, $data[$key], 'seo', $lang);
             }
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
@@ -545,13 +558,22 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
 
     Route::post('/sitemap', function (Request $request) {
         try {
+            // Whitelist of real sitemap fields. We must NOT blindly prefix every
+            // posted key with 'sitemap_' — Settings::getSettings() returns ALL
+            // rows (group is not a hard filter), so leaked keys echoed back on
+            // save previously caused recursive 'sitemap_sitemap_...' corruption.
+            $allowed = [
+                'enabled', 'include_pages', 'include_tours', 'include_destinations',
+                'include_blog', 'frequency', 'priority', 'exclude_urls', 'custom_urls',
+            ];
             $data = $request->all();
-            foreach ($data as $key => $value) {
-                if ($key !== '_token') {
-                    // JSON-encode arrays before storing
-                    $value = is_array($value) ? json_encode($value) : $value;
-                    Settings::store('sitemap_' . $key, $value, 'sitemap');
+            foreach ($allowed as $key) {
+                if (!array_key_exists($key, $data)) {
+                    continue;
                 }
+                $value = $data[$key];
+                $value = is_array($value) ? json_encode($value) : $value;
+                Settings::store('sitemap_' . $key, $value, 'sitemap');
             }
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
