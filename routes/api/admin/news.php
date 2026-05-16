@@ -257,7 +257,17 @@ Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
 
                     // Additional fields
                     $post->author_bio = $request->input('author_bio');
-                    $post->reading_time = $request->input('reading_time');
+                    // DEV-B07: auto-calculate reading time from content
+                    // (ceil(words / 200), HTML stripped). Manual input is
+                    // honoured only if explicitly provided and > 0.
+                    $manualRt = (int) $request->input('reading_time');
+                    if ($manualRt > 0) {
+                        $post->reading_time = $manualRt;
+                    } else {
+                        $plain = trim(preg_replace('/\s+/', ' ', strip_tags((string) $request->input('content'))));
+                        $words = $plain === '' ? 0 : count(preg_split('/\s+/', $plain));
+                        $post->reading_time = max(1, (int) ceil($words / 200));
+                    }
 
                     // PUBLISH DATE (Saved to explicit column)
                     if ($request->has('publish_date') && !empty($request->input('publish_date'))) {
