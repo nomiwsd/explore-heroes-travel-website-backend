@@ -1053,7 +1053,15 @@ Route::prefix('reviews')->group(function () {
             }
 
             // Transform to match frontend expectations
-            $data = $reviews->getCollection()->map(function ($review) use ($translationsById) {
+            // RV-01: bulk-load linked tours + their translations for ?lang=
+            $needTourTr = !empty($lang) && !is_default_lang($lang);
+            $tourIds = $reviews->getCollection()->where('object_model', 'tour')->pluck('object_id')->filter()->unique()->values()->all();
+            $toursById = !empty($tourIds) ? \Modules\Tour\Models\Tour::whereIn('id', $tourIds)->get()->keyBy('id') : collect();
+            $tourTrById = ($needTourTr && !empty($tourIds))
+                ? \Modules\Tour\Models\TourTranslation::whereIn('origin_id', $tourIds)->where('locale', $lang)->get()->keyBy('origin_id')
+                : collect();
+
+            $data = $reviews->getCollection()->map(function ($review) use ($translationsById, $toursById, $tourTrById) {
                 // Get Meta
                 $meta = \Modules\Review\Models\ReviewMeta::where('review_id', $review->id)->pluck('val', 'name')->toArray();
 
@@ -1081,10 +1089,11 @@ Route::prefix('reviews')->group(function () {
                 $tourImage = null;
 
                 if ($review->object_model === 'tour' && $review->object_id) {
-                    $tour = \Modules\Tour\Models\Tour::find($review->object_id);
+                    $tour = $toursById->get($review->object_id);
                     if ($tour) {
-                        $tourName = $tour->title;
-                        $tourLink = $tour->slug;
+                        $tourTr = $tourTrById->get($tour->id);
+                        $tourName = ($tourTr && !empty($tourTr->title)) ? $tourTr->title : $tour->title;
+                        $tourLink = ($tourTr && !empty($tourTr->slug)) ? $tourTr->slug : $tour->slug;
                         if (!$mainImage && $tour->image_id) {
                             $tourImage = get_file_url($tour->image_id, 'full');
                         }
@@ -1122,6 +1131,12 @@ Route::prefix('reviews')->group(function () {
                     'author_country' => $review->author_country ?? $meta['author_country'] ?? null,
                     'review_source' => $review->review_source ?? $meta['review_source'] ?? 'website',
                     'date' => $review->review_date ?? $meta['review_date'] ?? $review->created_at->format('Y-m-d'),
+                    // ISO 8601 (review_date when set, else created_at) for locale formatting
+                    'date_iso' => (function () use ($review, $meta) {
+                        $raw = $review->review_date ?? $meta['review_date'] ?? $review->created_at;
+                        try { return $raw ? \Carbon\Carbon::parse($raw)->toIso8601String() : null; } catch (\Throwable $e) { return null; }
+                    })(),
+                    'created_at_iso' => $review->created_at ? $review->created_at->toIso8601String() : null,
                     'trip_summary' => $tripSummary,
                     'agent_role' => $agentRole,
 
@@ -1174,6 +1189,17 @@ Route::prefix('reviews')->group(function () {
                     return $r;
                 });
             }
+
+            // RV-01: ISO date for locale formatting
+            $reviews = $reviews->map(function ($r) {
+                $raw = $r->review_date ?? $r->created_at ?? null;
+                try {
+                    $r->date_iso = $raw ? \Carbon\Carbon::parse($raw)->toIso8601String() : null;
+                } catch (\Throwable $e) {
+                    $r->date_iso = null;
+                }
+                return $r;
+            });
 
             return response()->json(['data' => $reviews]);
         } catch (\Exception $e) {
