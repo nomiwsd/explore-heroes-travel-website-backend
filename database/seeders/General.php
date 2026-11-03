@@ -52,11 +52,11 @@ class General extends Seeder
                     'group' => "general",
                 ], [
                     'name'  => 'email_from_name',
-                    'val'   => 'Booking Core',
+                    'val'   => 'Explore Heroes',
                     'group' => "general",
                 ], [
                     'name'  => 'email_from_address',
-                    'val'   => 'contact@bookingcore.test',
+                    'val'   => '',
                     'group' => "general",
                 ],
                 [
@@ -477,7 +477,7 @@ class General extends Seeder
                 ],
                 [
                     'name'  => "site_title",
-                    'val'   => "Booking Core",
+                    'val'   => "Explore Heroes",
                     'group' => "general",
                 ],
                 [
@@ -487,17 +487,17 @@ class General extends Seeder
                 ],
                 [
                     'name'  => "site_title",
-                    'val'   => "Booking Core",
+                    'val'   => "Explore Heroes",
                     'group' => "general",
                 ],
                 [
                     'name'  => "email_header",
-                    'val'   => '<h1 class="site-title" style="text-align: center">Booking Core</h1>',
+                    'val'   => '<h1 class="site-title" style="text-align: center">[site_name]</h1>',
                     'group' => "general",
                 ],
                 [
                     'name'  => "email_footer",
-                    'val'   => '<p class="" style="text-align: center">&copy; 2019 Booking Core. All rights reserved</p>',
+                    'val'   => '<p class="" style="text-align: center">&copy; [year] [site_name]. All rights reserved</p>',
                     'group' => "general",
                 ],
                 [
@@ -793,9 +793,7 @@ class General extends Seeder
                 ],
                 [
                     'name'  => "invoice_company_info",
-                    'val'   => "<p><span style=\"font-size: 14pt;\"><strong>Booking Core Company</strong></span></p>
-                                <p>Ha Noi, Viet Nam</p>
-                                <p>www.bookingcore.co</p>",
+                    'val'   => "<p><span style=\"font-size: 14pt;\"><strong>ExploreHeroes (Pvt) Ltd</strong></span></p><p>87 Dutugemunu St, Dehiwala-Mount Lavinia, Sri Lanka</p><p>exploreheroes.com</p>",
                     'group' => "booking",
                 ],
             ];

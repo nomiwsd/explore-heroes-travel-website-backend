@@ -24,7 +24,8 @@
 <script>
     var bookingCore  = {
         url:'{{url('/')}}',
-        map_provider:'{{setting_item('map_provider')}}',
+        {{-- ST-11: never select Google Maps without an API key --}}
+        map_provider:'{{ (setting_item('map_provider') === 'gmap' && !trim((string) setting_item('map_gmap_key'))) ? 'osm' : setting_item('map_provider') }}',
         map_gmap_key:'{{setting_item('map_gmap_key')}}'
     };
 

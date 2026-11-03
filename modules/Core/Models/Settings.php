@@ -40,7 +40,48 @@ class Settings extends BaseModel
         'payment_icon_paypal',
         'payment_icon_cards',
         'payment_icon_alipay',
+        // ST-10: cookie banner / consent texts are per-locale
+        'cookie_agreement_content',
+        'cookie_agreement_button_text',
+        'cookie_consent_title',
+        'cookie_consent_desc',
+        'cookie_consent_primary_btn_text',
+        'cookie_consent_secondary_btn_text',
+        'cookie_consent_setting_modal_title',
+        'cookie_consent_setting_modal_save',
+        'cookie_consent_setting_modal_accept',
+        'cookie_consent_setting_modal_reject',
+        'cookie_consent_preferences_title',
     ];
+
+    /**
+     * Keys that must never be exposed by public (unauthenticated) endpoints:
+     * mail/SMTP credentials, API secrets, tokens, Google Maps key, etc.
+     */
+    public static function isSensitiveKey(string $key): bool
+    {
+        return (bool) preg_match(
+            '/(password|passwd|secret|token|private|license|purchase_code|_api_key$|_api_secret$|gmap_key'
+            . '|^email_(driver|host|port|encryption|username|mailgun_|postmark_|ses_|sparkpost_)'
+            . '|^pusher_|^sms_|^twilio|^nexmo|^clickatell|^api_key$)/i',
+            $key
+        );
+    }
+
+    /**
+     * getSettings() for public endpoints: same locale overlay, minus sensitive
+     * keys (ST-01 / ST-11) and minus an empty Google Maps provider config.
+     */
+    public static function getPublicSettings($group = '', $locale = '')
+    {
+        $res = static::getSettings($group, $locale);
+        foreach (array_keys($res) as $key) {
+            if (static::isSensitiveKey((string) $key)) {
+                unset($res[$key]);
+            }
+        }
+        return $res;
+    }
 
     public static function isTranslatable(string $key): bool
     {

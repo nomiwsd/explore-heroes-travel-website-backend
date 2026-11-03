@@ -1,0 +1,121 @@
+# Explore Heroes — full stack (MySQL + Laravel + Next.js + nginx)
+#
+#   cd deploy
+#   cp .env.example .env              # compose settings (ports, URLs, DB)
+#   cp backend.env.example backend.env  # Laravel settings (APP_KEY, mail…)
+#   docker compose up -d --build
+#
+# See deploy/README.md for first-run, data import, TLS and updates.
+
+name: explore-heroes
+
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-explore_heroes}
+      MYSQL_USER: ${DB_USERNAME:-explore_heroes}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in deploy/.env}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in deploy/.env}
+      TZ: Asia/Colombo
+    volumes:
+      - db_data:/var/lib/mysql
+      # Any *.sql / *.sql.gz placed here is imported on the FIRST start only
+      # (when db_data is empty). Use it to load a dump of the current site.
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  app:
+    build:
+      context: ..
+      target: app
+    image: explore-heroes-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: backend.env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-explore_heroes}
+      DB_USERNAME: ${DB_USERNAME:-explore_heroes}
+      DB_PASSWORD: ${DB_PASSWORD}
+      APP_URL: ${SITE_URL:-http://localhost:8080}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-false}
+    volumes:
+      - backend_storage:/var/www/html/storage
+      # UPLOADS_PATH may be a host folder (e.g. /var/www/backend/public/uploads)
+      # to reuse existing media; defaults to a named volume.
+      - ${UPLOADS_PATH:-backend_uploads}:/var/www/html/public/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  scheduler:
+    image: explore-heroes-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    user: www-data
+    command: ["php", "artisan", "schedule:work"]
+    env_file: backend.env
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-explore_heroes}
+      DB_USERNAME: ${DB_USERNAME:-explore_heroes}
+      DB_PASSWORD: ${DB_PASSWORD}
+      APP_URL: ${SITE_URL:-http://localhost:8080}
+    volumes:
+      - backend_storage:/var/www/html/storage
+      - ${UPLOADS_PATH:-backend_uploads}:/var/www/html/public/uploads
+    depends_on:
+      app:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ${FRONTEND_PATH:-../../explore-heros-travel-website}
+      args:
+        # Browser-facing URLs: everything is served from the site domain.
+        NEXT_PUBLIC_API_URL: ${SITE_URL:-http://localhost:8080}
+        NEXT_PUBLIC_BACKEND_URL: ${SITE_URL:-http://localhost:8080}
+        NEXT_PUBLIC_SITE_URL: ${SITE_URL:-http://localhost:8080}
+        INTERNAL_API_URL: http://web
+        NEXT_IMAGE_UNOPTIMIZED: ${NEXT_IMAGE_UNOPTIMIZED:-false}
+    image: explore-heroes-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      INTERNAL_API_URL: http://web
+
+  web:
+    build:
+      context: ..
+      target: web
+    image: explore-heroes-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - backend_storage:/var/www/html/storage:ro
+      - ${UPLOADS_PATH:-backend_uploads}:/var/www/html/public/uploads:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - app
+      - frontend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/api/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  db_data:
+  backend_storage:
+  backend_uploads:

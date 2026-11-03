@@ -158,7 +158,9 @@ Route::prefix('destinations')->group(function () {
                         'show_on_homepage' => $dest->show_on_homepage,
                         'destination_type' => $dest->destination_type,
                         'display_order' => $dest->display_order,
-                        'tours_count' => \Modules\Tour\Models\TourLocation::where('location_id', $dest->id)->count() ?: Tour::where('location_id', $dest->id)->where('status', 'publish')->count(),
+                        // DS-08: pivot ∪ tours.location_id ∪ cities_covered match (published only)
+                        'tours_count' => \Modules\Tour\Support\TourDestinations::countForLocation($dest->id),
+                        'updated_at' => $dest->updated_at ? $dest->updated_at->toIso8601String() : null,
                     ];
                 }),
                 'total' => $destinations->count(),
@@ -231,21 +233,16 @@ Route::prefix('destinations')->group(function () {
                 ? $seoMeta->seo_desc
                 : (($translation && $translation->short_description) ? $translation->short_description : ($destination->seo_desc ?: $destination->short_description));
 
-            // Get assigned tours via pivot table
-            $assignedTourIds = \Modules\Tour\Models\TourLocation::where('location_id', $destination->id)->pluck('tour_id');
-
-            if ($assignedTourIds->count() > 0) {
-                $tours = Tour::whereIn('id', $assignedTourIds)
-                    ->where('status', 'publish')
-                    ->get();
-            } else {
-                // Fallback to old location_id column
-                $tours = Tour::where('location_id', $destination->id)
-                    ->where('status', 'publish')
-                    ->orderBy('is_featured', 'desc')
-                    ->orderBy('created_at', 'desc')
-                    ->get();
-            }
+            // DS-08: tours of a destination = pivot rows ∪ tours.location_id ∪
+            // tours whose cities_covered mentions this destination (published only)
+            $assignedTourIds = \Modules\Tour\Support\TourDestinations::tourIdsForLocations([$destination->id]);
+            $tours = Tour::whereIn('id', $assignedTourIds)
+                ->where('status', 'publish')
+                ->with('location')
+                ->orderBy('is_featured', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->get();
+            $needTourTranslation = $lang && !is_default_lang($lang);
 
             // Parse gallery
             $gallery = [];
@@ -295,8 +292,8 @@ Route::prefix('destinations')->group(function () {
                     'canonical_url' => $destination->canonical_url,
                     'robots_meta' => $destination->robots_meta,
                     'schema_markup' => $destination->schema_markup,
-                    'tours' => $tours->map(function ($tour) use ($lang) {
-                        $tourTranslation = $lang ? $tour->forceTranslate($lang) : null;
+                    'tours' => $tours->map(function ($tour) use ($lang, $needTourTranslation) {
+                        $tourTranslation = $needTourTranslation ? $tour->forceTranslate($lang) : null;
                         // Get image URL with fallbacks: image_id > banner_image_id > first hero_slider image
                         $imageUrl = null;
                         if ($tour->image_id) {
@@ -317,12 +314,23 @@ Route::prefix('destinations')->group(function () {
 
                         return [
                             'id' => $tour->id,
-                            'title' => $tourTranslation->title ?? $tour->title,
-                            'slug' => $tour->slug,
+                            'title' => ($tourTranslation && $tourTranslation->title) ? $tourTranslation->title : $tour->title,
+                            'slug' => ($tourTranslation && $tourTranslation->slug) ? $tourTranslation->slug : $tour->slug,
+                            'short_description' => ($tourTranslation && $tourTranslation->short_desc) ? $tourTranslation->short_desc : $tour->short_desc,
                             'price' => $tour->price,
                             'sale_price' => $tour->sale_price,
                             'duration' => $tour->duration,
+                            'duration_type' => $tour->duration_type,
+                            'nights' => $tour->nights,
+                            'tour_type' => $tour->tour_type,
+                            'is_featured' => $tour->is_featured,
                             'image_url' => $imageUrl,
+                            'destination' => $tour->location ? [
+                                'id' => $tour->location->id,
+                                'name' => \Modules\Tour\Support\TourDestinations::translatedName($tour->location, $lang),
+                                'slug' => $tour->location->slug,
+                            ] : null,
+                            'updated_at' => $tour->updated_at ? $tour->updated_at->toIso8601String() : null,
                         ];
                     }),
                 ],
@@ -428,7 +436,8 @@ Route::prefix('tours')->group(function () {
             // Filter by destination
             if ($request->has('destination_id') && $request->destination_id) {
                 $destIds = is_array($request->destination_id) ? $request->destination_id : explode(',', $request->destination_id);
-                $query->whereIn('location_id', $destIds);
+                // DS-08: pivot ∪ tours.location_id ∪ cities_covered match
+                $query->whereIn('id', \Modules\Tour\Support\TourDestinations::tourIdsForLocations($destIds));
             }
 
             // Filter by category (Multi-category support)
@@ -600,6 +609,7 @@ Route::prefix('tours')->group(function () {
                         'tour_themes' => $themes,
                         // Legacy single category for compatibility (optional)
                         'category' => $categories->first() ?? null,
+                        'updated_at' => $tour->updated_at ? $tour->updated_at->toIso8601String() : null,
                     ];
                 }),
                 'current_page' => $tours->currentPage(),
@@ -856,6 +866,8 @@ Route::prefix('tours')->group(function () {
                     'tour_themes' => $tourThemes,
                     'suitable_for' => $tour->suitable_for,
                     'cities_covered' => $tour->cities_covered,
+                    // TR-01: [{name (translated when a destination matches), original, slug, id}]
+                    'cities' => \Modules\Tour\Support\TourDestinations::cities($tour, $lang),
                     'availability_dates' => $tour->availability_dates,
                     'conditions' => $conditions,
                     'cancellation_policy' => $cancellationPolicy,
@@ -889,7 +901,6 @@ Route::prefix('tours')->group(function () {
                     'tour_expert' => $tour->tourExpert ? [
                         'id' => (int) $tour->tourExpert->id,
                         'name' => $tour->tourExpert->getDisplayName() ?? $tour->tourExpert->name ?? $tour->tourExpert->first_name,
-                        'email' => $tour->tourExpert->email ?? '',
                         'avatar' => $tour->tourExpert->avatar_id ? get_file_url($tour->tourExpert->avatar_id, 'thumb') : null,
                     ] : null,
                     // author removed
@@ -964,7 +975,7 @@ Route::prefix('tours')->group(function () {
 Route::prefix('settings')->group(function () {
     Route::get('/{group?}', function (Request $request, $group = 'general') {
         $lang = $request->query('lang');
-        $settings = Settings::getSettings($group, $lang);
+        $settings = Settings::getPublicSettings($group, $lang);
         return response()->json($settings);
     });
 });
@@ -988,23 +999,10 @@ Route::prefix('translations')->group(function () {
         }
     });
 
-    // Get translations for a specific locale
+    // Get translations for a specific locale.
+    // Order: storage/app/translations (admin Build) -> lang/ -> resources/lang/ -> public/locales/ -> {}
     Route::get('/{locale}', function ($locale) {
-        // First try to get from public file
-        $publicFile = base_path('public/locales/' . $locale . '.json');
-        if (file_exists($publicFile)) {
-            $content = file_get_contents($publicFile);
-            return response($content)->header('Content-Type', 'application/json');
-        }
-
-        // Fallback to resources/lang file
-        $file = base_path('resources/lang/' . $locale . '.json');
-        if (file_exists($file)) {
-            $content = file_get_contents($file);
-            return response($content)->header('Content-Type', 'application/json');
-        }
-
-        return response()->json([]);
+        return \Modules\Language\Support\PublicTranslations::response($locale);
     });
 });
 
@@ -1054,7 +1052,15 @@ Route::prefix('reviews')->group(function () {
             }
 
             // Transform to match frontend expectations
-            $data = $reviews->getCollection()->map(function ($review) use ($translationsById) {
+            // RV-01: bulk-load linked tours + their translations for ?lang=
+            $needTourTr = !empty($lang) && !is_default_lang($lang);
+            $tourIds = $reviews->getCollection()->where('object_model', 'tour')->pluck('object_id')->filter()->unique()->values()->all();
+            $toursById = !empty($tourIds) ? \Modules\Tour\Models\Tour::whereIn('id', $tourIds)->get()->keyBy('id') : collect();
+            $tourTrById = ($needTourTr && !empty($tourIds))
+                ? \Modules\Tour\Models\TourTranslation::whereIn('origin_id', $tourIds)->where('locale', $lang)->get()->keyBy('origin_id')
+                : collect();
+
+            $data = $reviews->getCollection()->map(function ($review) use ($translationsById, $toursById, $tourTrById) {
                 // Get Meta
                 $meta = \Modules\Review\Models\ReviewMeta::where('review_id', $review->id)->pluck('val', 'name')->toArray();
 
@@ -1082,10 +1088,11 @@ Route::prefix('reviews')->group(function () {
                 $tourImage = null;
 
                 if ($review->object_model === 'tour' && $review->object_id) {
-                    $tour = \Modules\Tour\Models\Tour::find($review->object_id);
+                    $tour = $toursById->get($review->object_id);
                     if ($tour) {
-                        $tourName = $tour->title;
-                        $tourLink = $tour->slug;
+                        $tourTr = $tourTrById->get($tour->id);
+                        $tourName = ($tourTr && !empty($tourTr->title)) ? $tourTr->title : $tour->title;
+                        $tourLink = ($tourTr && !empty($tourTr->slug)) ? $tourTr->slug : $tour->slug;
                         if (!$mainImage && $tour->image_id) {
                             $tourImage = get_file_url($tour->image_id, 'full');
                         }
@@ -1117,12 +1124,17 @@ Route::prefix('reviews')->group(function () {
                     // Prioritize Columns over Meta
                     'author_id' => $review->author_id,
                     'author_name' => $review->author_name ?? $meta['author_name'] ?? ($review->author ? $review->author->name : 'Anonymous'),
-                    'author_email' => $review->author_email ?? $meta['author_email'] ?? ($review->author ? $review->author->email : null),
                     'author_avatar' => $review->author_avatar ?? $meta['author_avatar'] ?? ($review->author ? get_file_url($review->author->avatar_id, 'full') : null),
                     'author_location' => $review->author_location ?? $meta['author_location'] ?? null,
                     'author_country' => $review->author_country ?? $meta['author_country'] ?? null,
                     'review_source' => $review->review_source ?? $meta['review_source'] ?? 'website',
                     'date' => $review->review_date ?? $meta['review_date'] ?? $review->created_at->format('Y-m-d'),
+                    // ISO 8601 (review_date when set, else created_at) for locale formatting
+                    'date_iso' => (function () use ($review, $meta) {
+                        $raw = $review->review_date ?? $meta['review_date'] ?? $review->created_at;
+                        try { return $raw ? \Carbon\Carbon::parse($raw)->toIso8601String() : null; } catch (\Throwable $e) { return null; }
+                    })(),
+                    'created_at_iso' => $review->created_at ? $review->created_at->toIso8601String() : null,
                     'trip_summary' => $tripSummary,
                     'agent_role' => $agentRole,
 
@@ -1175,6 +1187,17 @@ Route::prefix('reviews')->group(function () {
                     return $r;
                 });
             }
+
+            // RV-01: ISO date for locale formatting
+            $reviews = $reviews->map(function ($r) {
+                $raw = $r->review_date ?? $r->created_at ?? null;
+                try {
+                    $r->date_iso = $raw ? \Carbon\Carbon::parse($raw)->toIso8601String() : null;
+                } catch (\Throwable $e) {
+                    $r->date_iso = null;
+                }
+                return $r;
+            });
 
             return response()->json(['data' => $reviews]);
         } catch (\Exception $e) {
@@ -1317,26 +1340,9 @@ Route::prefix('news')->group(function () {
 
             // Transform data with images and author
             $data = collect($posts->items())->map(function ($post) use ($lang, $tagsByPost) {
-                $translation = $lang ? $post->forceTranslate($lang) : null;
-                // Get author info
-                $author = null;
-                if ($post->create_user) {
-                    $user = \App\User::find($post->create_user);
-                    if ($user) {
-                        $author = [
-                            'id' => $user->id,
-                            'display_name' => $user->name ?? $user->display_name ?? 'Unknown',
-                            'avatar_url' => null,
-                        ];
-                        if ($user->avatar_id) {
-                            $media = \Modules\Media\Models\MediaFile::find($user->avatar_id);
-                            if ($media) {
-                                $author['avatar_url'] = '/uploads/' . ltrim($media->file_path, '/');
-                                $author['avatar_url'] = str_replace('/uploads/uploads/', '/uploads/', $author['avatar_url']);
-                            }
-                        }
-                    }
-                }
+                $translation = ($lang && !is_default_lang($lang)) ? $post->forceTranslate($lang) : null;
+                // BL-01: public author (display name, never an email)
+                $author = \Modules\News\Support\NewsPresenter::author($post->create_user ?: $post->author_id, false);
 
                 // Clean image URL (return relative path for frontend robustness)
                 $imageUrl = null;
@@ -1364,10 +1370,12 @@ Route::prefix('news')->group(function () {
 
                 return [
                     'id' => $post->id,
-                    'title' => $translation->title ?? $post->title,
+                    'title' => \Modules\News\Support\NewsPresenter::tr($translation, $post, 'title'),
                     'slug' => ($translation && $translation->slug) ? $translation->slug : $post->slug,
-                    'content' => $translation->content ?? $post->content,
-                    'excerpt' => $translation->excerpt ?? $post->excerpt,
+                    'content' => \Modules\News\Support\NewsPresenter::tr($translation, $post, 'content'),
+                    'excerpt' => \Modules\News\Support\NewsPresenter::tr($translation, $post, 'excerpt'),
+                    'image_alt' => \Modules\News\Support\NewsPresenter::imageAlt($post, $translation),
+                    'featured_image_alt' => \Modules\News\Support\NewsPresenter::imageAlt($post, $translation),
                     'status' => $post->status,
                     'is_featured' => $post->is_featured,
                     'cat_id' => $post->cat_id,
@@ -1377,8 +1385,9 @@ Route::prefix('news')->group(function () {
                     'image_url' => $imageUrl,
                     'author' => $author,
                     'publish_date' => $post->publish_date ? $post->publish_date->format('Y-m-d') : ($post->created_at ? $post->created_at->format('Y-m-d') : null),
+                    'published_at' => \Modules\News\Support\NewsPresenter::publishedAt($post),
                     'created_at' => $post->created_at,
-                    'updated_at' => $post->updated_at,
+                    'updated_at' => \Modules\News\Support\NewsPresenter::iso($post->updated_at),
                 ];
             });
 
@@ -1431,26 +1440,9 @@ Route::prefix('news')->group(function () {
             }
 
             $data = $posts->map(function ($post) use ($lang, $tagsByPost) {
-                $translation = $lang ? $post->forceTranslate($lang) : null;
-                // Get author info
-                $author = null;
-                if ($post->create_user) {
-                    $user = \App\User::find($post->create_user);
-                    if ($user) {
-                        $author = [
-                            'id' => $user->id,
-                            'display_name' => $user->name ?? $user->display_name ?? 'Unknown',
-                            'avatar_url' => null,
-                        ];
-                        if ($user->avatar_id) {
-                            $media = \Modules\Media\Models\MediaFile::find($user->avatar_id);
-                            if ($media) {
-                                $author['avatar_url'] = '/uploads/' . ltrim($media->file_path, '/');
-                                $author['avatar_url'] = str_replace('/uploads/uploads/', '/uploads/', $author['avatar_url']);
-                            }
-                        }
-                    }
-                }
+                $translation = ($lang && !is_default_lang($lang)) ? $post->forceTranslate($lang) : null;
+                // BL-01: public author (display name, never an email)
+                $author = \Modules\News\Support\NewsPresenter::author($post->create_user ?: $post->author_id, false);
 
                 // Clean image URL (return relative path for frontend robustness)
                 $imageUrl = null;
@@ -1478,10 +1470,12 @@ Route::prefix('news')->group(function () {
 
                 return [
                     'id' => $post->id,
-                    'title' => $translation->title ?? $post->title,
+                    'title' => \Modules\News\Support\NewsPresenter::tr($translation, $post, 'title'),
                     'slug' => ($translation && $translation->slug) ? $translation->slug : $post->slug,
-                    'content' => $translation->content ?? $post->content,
-                    'excerpt' => $translation->excerpt ?? $post->excerpt,
+                    'content' => \Modules\News\Support\NewsPresenter::tr($translation, $post, 'content'),
+                    'excerpt' => \Modules\News\Support\NewsPresenter::tr($translation, $post, 'excerpt'),
+                    'image_alt' => \Modules\News\Support\NewsPresenter::imageAlt($post, $translation),
+                    'featured_image_alt' => \Modules\News\Support\NewsPresenter::imageAlt($post, $translation),
                     'is_featured' => $post->is_featured,
                     'cat_id' => $post->cat_id,
                     'category' => $categoryData,
@@ -1490,7 +1484,9 @@ Route::prefix('news')->group(function () {
                     'image_url' => $imageUrl,
                     'author' => $author,
                     'publish_date' => $post->publish_date ? $post->publish_date->format('Y-m-d') : ($post->created_at ? $post->created_at->format('Y-m-d') : null),
+                    'published_at' => \Modules\News\Support\NewsPresenter::publishedAt($post),
                     'created_at' => $post->created_at,
+                    'updated_at' => \Modules\News\Support\NewsPresenter::iso($post->updated_at),
                 ];
             });
 
@@ -1674,26 +1670,10 @@ Route::prefix('news')->group(function () {
                 })->all();
             }
 
-            // Get author info
-            $author = null;
-            if ($post->create_user) {
-                $user = \App\User::find($post->create_user);
-                if ($user) {
-                    $author = [
-                        'id' => $user->id,
-                        'display_name' => $user->display_name ?? $user->name ?? 'Unknown',
-                        'avatar_url' => null,
-                        'bio' => $user->bio ?? null,
-                    ];
-                    if ($user->avatar_id) {
-                        $media = \Modules\Media\Models\MediaFile::find($user->avatar_id);
-                        if ($media) {
-                            $author['avatar_url'] = '/uploads/' . ltrim($media->file_path, '/');
-                            $author['avatar_url'] = str_replace('/uploads/uploads/', '/uploads/', $author['avatar_url']);
-                        }
-                    }
-                }
-            }
+            // BL-01: public author (display name, never an email).
+            // BL-04: author bio is per-locale (core_news_translations.author_bio).
+            $authorBio = \Modules\News\Support\NewsPresenter::authorBio($post, $translation);
+            $author = \Modules\News\Support\NewsPresenter::author($post->create_user ?: $post->author_id, $authorBio);
 
             // Clean image URL helper (return relative path for frontend robustness)
             $getImageUrl = function($imageId) {
@@ -1736,17 +1716,14 @@ Route::prefix('news')->group(function () {
             // Ideally related posts should also respect lang, but it might be expensive.
             // Let's stick to main post translation first.
 
-            $related = $relatedPostsResolved->map(function ($p) use ($getImageUrl) {
-                return [
-                    'id' => $p->id,
-                    'title' => $p->title, // Could translate this too if needed
-                    'slug' => $p->slug,
-                    'excerpt' => $p->excerpt,
-                    'image_url' => $getImageUrl($p->image_id),
-                    'publish_date' => $p->publish_date ? $p->publish_date->format('Y-m-d') : ($p->created_at ? $p->created_at->format('Y-m-d') : null),
-                    'created_at' => $p->created_at,
-                ];
-            });
+            // BL-03: related posts honour ?lang= (title, slug, excerpt, category)
+            $relatedTranslations = \Modules\News\Support\NewsPresenter::translationsFor(
+                $relatedPostsResolved->pluck('id')->map(function ($v) { return (int) $v; })->all(),
+                $lang
+            );
+            $related = $relatedPostsResolved->map(function ($p) use ($lang, $relatedTranslations) {
+                return \Modules\News\Support\NewsPresenter::relatedCard($p, $lang, $relatedTranslations[(int) $p->id] ?? null);
+            })->values();
 
             // Translate location name
             $locationTr = ($lang && !is_default_lang($lang) && $post->location)
@@ -1781,7 +1758,8 @@ Route::prefix('news')->group(function () {
                     'excerpt' => ($translation && $translation->excerpt) ? $translation->excerpt : $post->excerpt,
                     'short_desc' => ($translation && $translation->short_desc) ? $translation->short_desc : $post->short_desc,
                     'image_url' => $getImageUrl($post->image_id),
-                    'image_alt' => $post->image_alt ?? null,
+                    'image_alt' => \Modules\News\Support\NewsPresenter::imageAlt($post, $translation),
+                    'featured_image_alt' => \Modules\News\Support\NewsPresenter::imageAlt($post, $translation),
                     'cat_id' => $post->cat_id,
                     'category' => $category,
                     'tags' => $tags,
@@ -1791,10 +1769,12 @@ Route::prefix('news')->group(function () {
                         'slug' => $post->location->slug,
                     ] : null,
                     'author' => $author,
-                    'author_bio' => $post->author_bio,
+                    'author_bio' => $authorBio,
                     'reading_time' => $post->reading_time ?? null,
                     'publish_date' => $post->publish_date ? $post->publish_date->format('Y-m-d') : ($post->created_at ? $post->created_at->format('Y-m-d') : null),
+                    'published_at' => \Modules\News\Support\NewsPresenter::publishedAt($post),
                     'created_at' => $post->created_at,
+                    'updated_at' => \Modules\News\Support\NewsPresenter::iso($post->updated_at),
 
                     // SEO metadata — locale-aware fallback chain
                     'meta_title' => $metaTitle,
@@ -2069,6 +2049,63 @@ Route::prefix('admin/page-settings')->middleware('auth:sanctum')->group(function
 
 
 // =====================================================
+// SEO REDIRECTS (Public, read-only) — RD-01
+// GET /api/seo/redirects -> [{ "from": "/old", "to": "/new-or-absolute", "status": 301 }]
+// Only active rules. Cached 5 min; admin store/bulkEdit clears the cache key.
+// (Admin CRUD lives at /api/module/core/seo/redirects, auth-only.)
+// =====================================================
+Route::prefix('seo')->group(function () {
+    Route::get('/redirects', function () {
+        try {
+            $rules = \Illuminate\Support\Facades\Cache::remember('seo_public_redirects', 300, function () {
+                if (!Schema::hasTable('bc_redirects')) {
+                    return [];
+                }
+                $q = DB::table('bc_redirects');
+                if (Schema::hasColumn('bc_redirects', 'is_active')) {
+                    $q->where('is_active', 1);
+                }
+                $hasStatus = Schema::hasColumn('bc_redirects', 'status_code');
+                $out = [];
+                $seen = [];
+                foreach ($q->orderBy('id', 'desc')->get() as $row) {
+                    $from = trim((string) ($row->old_url ?? ''));
+                    $to = trim((string) ($row->new_url ?? ''));
+                    if ($from === '' || $to === '') {
+                        continue;
+                    }
+                    // Normalise "from" to a path (+ query) starting with "/"
+                    if (preg_match('#^https?://#i', $from)) {
+                        $parts = parse_url($from);
+                        $from = ($parts['path'] ?? '/') . (isset($parts['query']) ? '?' . $parts['query'] : '');
+                    }
+                    if ($from[0] !== '/') {
+                        $from = '/' . $from;
+                    }
+                    // "to" may be absolute; relative targets get a leading "/"
+                    if (!preg_match('#^https?://#i', $to) && $to[0] !== '/') {
+                        $to = '/' . $to;
+                    }
+                    if ($from === $to || isset($seen[$from])) {
+                        continue;
+                    }
+                    $seen[$from] = true;
+                    $status = $hasStatus ? (int) $row->status_code : 301;
+                    if (!in_array($status, [301, 302, 307, 308], true)) {
+                        $status = 301;
+                    }
+                    $out[] = ['from' => $from, 'to' => $to, 'status' => $status];
+                }
+                return $out;
+            });
+            return response()->json($rules)->header('Cache-Control', 'public, max-age=300');
+        } catch (\Exception $e) {
+            return response()->json([]);
+        }
+    });
+});
+
+// =====================================================
 // SEO API (Public Access)
 // =====================================================
 Route::prefix('module/core/seo')->group(function () {
@@ -2076,7 +2113,7 @@ Route::prefix('module/core/seo')->group(function () {
     Route::get('/global', function (Request $request) {
         try {
             $lang = $request->query('lang');
-            $settings = Settings::getSettings('seo', $lang);
+            $settings = Settings::getPublicSettings('seo', $lang);
             return response()->json($settings);
         } catch (\Exception $e) {
             return response()->json([]);
@@ -2086,7 +2123,7 @@ Route::prefix('module/core/seo')->group(function () {
     // Sitemap Settings
     Route::get('/sitemap', function () {
         try {
-            $settings = Settings::getSettings('sitemap');
+            $settings = Settings::getPublicSettings('sitemap');
             return response()->json($settings);
         } catch (\Exception $e) {
             return response()->json([]);

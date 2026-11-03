@@ -13,7 +13,12 @@ return new class extends Migration
     {
         Schema::table('bc_contact', function (Blueprint $table) {
             if (!Schema::hasColumn('bc_contact', 'notes')) {
-                $table->text('notes')->nullable()->after('special_requirements');
+                // `special_requirements` is added by a later migration, so only
+                // position the column when it already exists (fresh installs).
+                $column = $table->text('notes')->nullable();
+                if (Schema::hasColumn('bc_contact', 'special_requirements')) {
+                    $column->after('special_requirements');
+                }
             }
         });
     }

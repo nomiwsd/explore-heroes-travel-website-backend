@@ -341,6 +341,29 @@ Route::prefix('module/news')->middleware('auth:sanctum')->group(function () {
                     // Save translation row (bypass multi-lang gate)
                     $translation = $post->forceSaveTranslation($lang, $request->input());
 
+                    // BL-04: per-locale featured image alt + author bio.
+                    // Accepts image_alt (what the Next admin sends after mapping)
+                    // or featured_image_alt, and author_bio.
+                    if ($translation) {
+                        $extra = [];
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('core_news_translations', 'image_alt')
+                            && ($request->has('image_alt') || $request->has('featured_image_alt'))) {
+                            $extra['image_alt'] = $request->has('image_alt')
+                                ? $request->input('image_alt')
+                                : $request->input('featured_image_alt');
+                        }
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('core_news_translations', 'author_bio')
+                            && $request->has('author_bio')) {
+                            $extra['author_bio'] = $request->input('author_bio');
+                        }
+                        if ($extra) {
+                            foreach ($extra as $k => $v) {
+                                $translation->setAttribute($k, $v);
+                            }
+                            $translation->save();
+                        }
+                    }
+
                     // Persist per-locale SEO so admin's edits to seo/og/twitter
                     // on the translation tab actually save and flow to the
                     // public page. bc_seo row keyed by:

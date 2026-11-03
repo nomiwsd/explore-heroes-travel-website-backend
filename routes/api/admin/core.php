@@ -503,6 +503,7 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
                 $data['created_at'] = now();
                 $id = DB::table('bc_redirects')->insertGetId($data);
             }
+            \Illuminate\Support\Facades\Cache::forget('seo_public_redirects'); // RD-01
 
             return response()->json(['success' => true, 'id' => $id]);
         } catch (\Exception $e) {
@@ -518,6 +519,7 @@ Route::prefix('module/core/seo')->middleware('auth:sanctum')->group(function () 
             if ($action === 'delete') {
                 DB::table('bc_redirects')->whereIn('id', $ids)->delete();
             }
+            \Illuminate\Support\Facades\Cache::forget('seo_public_redirects'); // RD-01
 
             return response()->json(['success' => true]);
         } catch (\Exception $e) {

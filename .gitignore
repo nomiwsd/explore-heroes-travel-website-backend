@@ -37,3 +37,13 @@ public/themes/*/dist
 README-clean-broken-images.md
 README-remove-images.md
 public/sitemap.xml
+
+# Docker deploy secrets and data (see deploy/README.md)
+/deploy/.env
+/deploy/backend.env
+/deploy/initdb/*
+!/deploy/initdb/.gitkeep
+/deploy/certbot/*
+!/deploy/certbot/www/
+/deploy/certbot/www/*
+!/deploy/certbot/www/.gitkeep

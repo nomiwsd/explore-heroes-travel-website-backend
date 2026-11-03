@@ -167,8 +167,8 @@ class ContactController extends Controller
         $row->status = 'sent';
         if ($row->save()) {
 
-            $from = env('MAIL_FROM_ADDRESS');
-            $from_name = env('MAIL_FROM_NAME');
+            $from = config('mail.from.address');
+            $from_name = config('mail.from.name');
             $to = $row->email;
             $to_name = $row->first_name . ' ' . $row->last_name;
             $email_title = trans('Tailor Made Tour');
@@ -179,8 +179,8 @@ class ContactController extends Controller
                     </div>';
             $this->sendEmailNew($from, $from_name, $to, $to_name, $email_title, $msg);
 
-            $from = env('MAIL_FROM_ADDRESS');
-            $from_name = env('MAIL_FROM_NAME');
+            $from = config('mail.from.address');
+            $from_name = config('mail.from.name');
             $to = "hello@exploreheroes.com";
 //            $to = "mohsinrao.ali@gmail.com";
             $to_name = "Explore Heroes";
@@ -240,7 +240,7 @@ class ContactController extends Controller
                 $message->to($to)->from($from, $from_name)->subject($email_title);
             });
         } catch (\Throwable $th) {
-            dd($th->getMessage());
+            Log::warning('Contact sendEmailNew: ' . $th->getMessage());
         }
     }
 

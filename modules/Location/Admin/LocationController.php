@@ -84,9 +84,21 @@ class LocationController extends AdminController
             return redirect(route('location.admin.index'));
         }
         
-        $translation = $row->translate($request->query('lang',get_main_lang()));
+        $editLang = $request->query('lang', get_main_lang());
+        $isDefaultEditLang = !$editLang || is_default_lang($editLang);
+        // Non-default tab: always read the real per-locale row (works even when
+        // site_enable_multi_lang is off), never the origin.
+        $translation = $isDefaultEditLang ? $row->translate($editLang) : $row->forceTranslate($editLang);
 
         if ($request->wantsJson() || $request->expectsJson()) {
+            // DS-01: per-locale SEO (bc_seo object_model = location_translation_{lang})
+            $translationSeo = null;
+            if (!$isDefaultEditLang && $translation && $translation->id) {
+                $translationSeo = \Modules\Core\Models\SEO::where('object_id', $translation->id)
+                    ->where('object_model', 'location_translation_' . $editLang)
+                    ->first();
+            }
+
             $imageUrl = $this->getRelativePath($row->image_id);
             $bannerImageUrl = $this->getRelativePath($row->banner_image_id);
             $ogImageUrl = $this->getRelativePath($row->og_image_id);
@@ -102,7 +114,7 @@ class LocationController extends AdminController
                     'id' => $row->id,
                     'name' => $row->name,
                     'slug' => $row->slug,
-                    'content' => $translation->content,
+                    'content' => $isDefaultEditLang && $translation ? $translation->content : $row->content,
                     'banner_image_id' => $row->banner_image_id ?? null,
                     'banner_image_url' => $bannerImageUrl,
                     'gallery' => $row->gallery,
@@ -115,7 +127,7 @@ class LocationController extends AdminController
                     'show_on_homepage' => $row->show_on_homepage,
                     'destination_type' => $row->destination_type ?? 'city',
                     'display_order' => $row->display_order ?? 0,
-                    'short_description' => $translation->short_description,
+                    'short_description' => $isDefaultEditLang && $translation ? $translation->short_description : $row->short_description,
                     'seo_title' => $seo['seo_title'] ?? '',
                     'seo_desc' => $seo['seo_desc'] ?? '',
                     'og_title' => $row->og_title,
@@ -139,7 +151,9 @@ class LocationController extends AdminController
                     'seo_keywords' => $row->seo_keywords,
 
                 ],
-                'translation' => $translation
+                'translation' => $translation,
+                // Admin form overlays these on the SEO fields for the non-default tab
+                'translation_seo' => $translationSeo,
             ]);
         }
         
@@ -178,6 +192,14 @@ class LocationController extends AdminController
             $row->status = "publish";
         }
 
+        // DS-05: strip pasted inline styles / font / empty span wrappers on save
+        $request->merge(\Modules\Location\Support\ContentCleaner::cleanFields(
+            $request->only(['content', 'short_description'])
+        ));
+
+        $saveLang = $request->input('lang');
+        $isDefaultSaveLang = !$saveLang || is_default_lang($saveLang);
+
         $record = $row->fill($request->input());
         $row->map_lat = $request->input('map_lat');
         $row->map_lng = $request->input('map_lng');
@@ -193,20 +215,38 @@ class LocationController extends AdminController
         if ($res) {
             // Use updateOrInsert to avoid duplicate entry errors
             $locale = $request->input('lang') ?? get_main_lang() ?? 'en';
+            $trValues = [
+                'name' => $request->input('name'),
+                'short_description' => $request->input('short_description'),
+                'content' => $request->input('content'),
+                'trip_ideas' => $request->input('trip_ideas'),
+                'create_user' => Auth::id(),
+                'updated_at' => now(),
+            ];
+            if (!$isDefaultSaveLang && $request->filled('slug')
+                && \Illuminate\Support\Facades\Schema::hasColumn('bc_location_translations', 'slug')) {
+                $trValues['slug'] = $request->input('slug');
+            }
             LocationTranslation::updateOrInsert(
                 ['origin_id' => $row->id, 'locale' => $locale],
-                [
-                    'name' => $request->input('name'),
-                    'short_description' => $request->input('short_description'),
-                    'content' => $request->input('content'),
-                    'trip_ideas' => $request->input('trip_ideas'),
-                    'create_user' => Auth::id(),
-                    'updated_at' => now(),
-                ]
+                $trValues
             );
-            
-            // Save SEO
-            $row->saveSEO($request);
+
+            // Save SEO.
+            // DS-01: a non-default language save must NOT touch the origin's
+            // SEO row; store it per-locale on the translation row instead
+            // (bc_seo object_model = location_translation_{lang}), which the
+            // public destination endpoint reads.
+            if ($isDefaultSaveLang) {
+                $row->saveSEO($request);
+            } else {
+                $translationRow = LocationTranslation::where('origin_id', $row->id)
+                    ->where('locale', $locale)
+                    ->first();
+                if ($translationRow) {
+                    $translationRow->saveSEO($request, $locale);
+                }
+            }
 
             // Save Tours
             $tours = $request->input('assigned_tour_ids');
