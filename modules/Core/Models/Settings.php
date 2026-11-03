@@ -63,7 +63,10 @@ class Settings extends BaseModel
         return (bool) preg_match(
             '/(password|passwd|secret|token|private|license|purchase_code|_api_key$|_api_secret$|gmap_key'
             . '|^email_(driver|host|port|encryption|username|mailgun_|postmark_|ses_|sparkpost_)'
-            . '|^pusher_|^sms_|^twilio|^nexmo|^clickatell|^api_key$)/i',
+            . '|^pusher_|^sms_|^twilio|^nexmo|^clickatell|^api_key$'
+            // any *_key / *_sid / *_auth (e.g. filesystem_s3_key), storage and
+            // cloud credentials, and payment gateway settings (g_*)
+            . '|_key$|_sid$|_auth$|^filesystem_|^aws_|^g_)/i',
             $key
         );
     }
