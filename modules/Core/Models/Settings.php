@@ -40,6 +40,18 @@ class Settings extends BaseModel
         'payment_icon_paypal',
         'payment_icon_cards',
         'payment_icon_alipay',
+        // ST-10: cookie banner / consent texts are per-locale
+        'cookie_agreement_content',
+        'cookie_agreement_button_text',
+        'cookie_consent_title',
+        'cookie_consent_desc',
+        'cookie_consent_primary_btn_text',
+        'cookie_consent_secondary_btn_text',
+        'cookie_consent_setting_modal_title',
+        'cookie_consent_setting_modal_save',
+        'cookie_consent_setting_modal_accept',
+        'cookie_consent_setting_modal_reject',
+        'cookie_consent_preferences_title',
     ];
 
     /**
