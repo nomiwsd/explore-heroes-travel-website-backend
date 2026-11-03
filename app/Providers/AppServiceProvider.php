@@ -73,11 +73,17 @@ class AppServiceProvider extends ServiceProvider
             Config::set('app.name', $data);
         }
 
-        if (!empty(setting_item('email_from_address'))) {
-            Config::set('mail.from.address', setting_item("email_from_address"));
+        // ST-02: ignore the BookingCore template's demo sender values stored in settings
+        $fromAddress = trim((string) setting_item('email_from_address'));
+        if ($fromAddress !== '' && stripos($fromAddress, 'bookingcore') === false) {
+            Config::set('mail.from.address', $fromAddress);
         }
-        if (!empty(setting_item('email_from_name'))) {
-            Config::set('mail.from.name', setting_item("email_from_name"));
+        $fromName = trim((string) setting_item('email_from_name'));
+        if ($fromName !== '' && stripos($fromName, 'booking core') === false) {
+            Config::set('mail.from.name', $fromName);
+        } elseif (stripos((string) config('mail.from.name'), 'booking core') !== false || !config('mail.from.name')) {
+            $site = trim((string) setting_item('site_title'));
+            Config::set('mail.from.name', ($site !== '' && stripos($site, 'booking core') === false) ? $site : 'Explore Heroes');
         }
         if (!empty(setting_item('site_timezone'))) {
             Config::set('app.timezone', setting_item("site_timezone"));
