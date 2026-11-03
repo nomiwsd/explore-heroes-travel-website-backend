@@ -172,8 +172,12 @@ class TourDestinations
         }
         if ($lang && !is_default_lang($lang)) {
             $tr = static::translationsFor($lang)[(int) $location->id] ?? null;
-            if (!$tr) {
-                $tr = method_exists($location, 'forceTranslate') ? $location->forceTranslate($lang) : null;
+            // translationsFor() already bulk-loaded every published location's
+            // translation; only look up locations outside that set (e.g.
+            // unpublished), instead of one query per tour on a miss.
+            if (!$tr && !isset(static::$locations[(int) $location->id])
+                && method_exists($location, 'forceTranslate')) {
+                $tr = $location->forceTranslate($lang);
             }
             if ($tr && !empty($tr->name)) {
                 return $tr->name;
