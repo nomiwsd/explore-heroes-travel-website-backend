@@ -158,7 +158,9 @@ Route::prefix('destinations')->group(function () {
                         'show_on_homepage' => $dest->show_on_homepage,
                         'destination_type' => $dest->destination_type,
                         'display_order' => $dest->display_order,
-                        'tours_count' => \Modules\Tour\Models\TourLocation::where('location_id', $dest->id)->count() ?: Tour::where('location_id', $dest->id)->where('status', 'publish')->count(),
+                        // DS-08: pivot ∪ tours.location_id ∪ cities_covered match (published only)
+                        'tours_count' => \Modules\Tour\Support\TourDestinations::countForLocation($dest->id),
+                        'updated_at' => $dest->updated_at ? $dest->updated_at->toIso8601String() : null,
                     ];
                 }),
                 'total' => $destinations->count(),
@@ -231,21 +233,16 @@ Route::prefix('destinations')->group(function () {
                 ? $seoMeta->seo_desc
                 : (($translation && $translation->short_description) ? $translation->short_description : ($destination->seo_desc ?: $destination->short_description));
 
-            // Get assigned tours via pivot table
-            $assignedTourIds = \Modules\Tour\Models\TourLocation::where('location_id', $destination->id)->pluck('tour_id');
-
-            if ($assignedTourIds->count() > 0) {
-                $tours = Tour::whereIn('id', $assignedTourIds)
-                    ->where('status', 'publish')
-                    ->get();
-            } else {
-                // Fallback to old location_id column
-                $tours = Tour::where('location_id', $destination->id)
-                    ->where('status', 'publish')
-                    ->orderBy('is_featured', 'desc')
-                    ->orderBy('created_at', 'desc')
-                    ->get();
-            }
+            // DS-08: tours of a destination = pivot rows ∪ tours.location_id ∪
+            // tours whose cities_covered mentions this destination (published only)
+            $assignedTourIds = \Modules\Tour\Support\TourDestinations::tourIdsForLocations([$destination->id]);
+            $tours = Tour::whereIn('id', $assignedTourIds)
+                ->where('status', 'publish')
+                ->with('location')
+                ->orderBy('is_featured', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->get();
+            $needTourTranslation = $lang && !is_default_lang($lang);
 
             // Parse gallery
             $gallery = [];
@@ -295,8 +292,8 @@ Route::prefix('destinations')->group(function () {
                     'canonical_url' => $destination->canonical_url,
                     'robots_meta' => $destination->robots_meta,
                     'schema_markup' => $destination->schema_markup,
-                    'tours' => $tours->map(function ($tour) use ($lang) {
-                        $tourTranslation = $lang ? $tour->forceTranslate($lang) : null;
+                    'tours' => $tours->map(function ($tour) use ($lang, $needTourTranslation) {
+                        $tourTranslation = $needTourTranslation ? $tour->forceTranslate($lang) : null;
                         // Get image URL with fallbacks: image_id > banner_image_id > first hero_slider image
                         $imageUrl = null;
                         if ($tour->image_id) {
@@ -317,12 +314,23 @@ Route::prefix('destinations')->group(function () {
 
                         return [
                             'id' => $tour->id,
-                            'title' => $tourTranslation->title ?? $tour->title,
-                            'slug' => $tour->slug,
+                            'title' => ($tourTranslation && $tourTranslation->title) ? $tourTranslation->title : $tour->title,
+                            'slug' => ($tourTranslation && $tourTranslation->slug) ? $tourTranslation->slug : $tour->slug,
+                            'short_description' => ($tourTranslation && $tourTranslation->short_desc) ? $tourTranslation->short_desc : $tour->short_desc,
                             'price' => $tour->price,
                             'sale_price' => $tour->sale_price,
                             'duration' => $tour->duration,
+                            'duration_type' => $tour->duration_type,
+                            'nights' => $tour->nights,
+                            'tour_type' => $tour->tour_type,
+                            'is_featured' => $tour->is_featured,
                             'image_url' => $imageUrl,
+                            'destination' => $tour->location ? [
+                                'id' => $tour->location->id,
+                                'name' => \Modules\Tour\Support\TourDestinations::translatedName($tour->location, $lang),
+                                'slug' => $tour->location->slug,
+                            ] : null,
+                            'updated_at' => $tour->updated_at ? $tour->updated_at->toIso8601String() : null,
                         ];
                     }),
                 ],
@@ -428,7 +436,8 @@ Route::prefix('tours')->group(function () {
             // Filter by destination
             if ($request->has('destination_id') && $request->destination_id) {
                 $destIds = is_array($request->destination_id) ? $request->destination_id : explode(',', $request->destination_id);
-                $query->whereIn('location_id', $destIds);
+                // DS-08: pivot ∪ tours.location_id ∪ cities_covered match
+                $query->whereIn('id', \Modules\Tour\Support\TourDestinations::tourIdsForLocations($destIds));
             }
 
             // Filter by category (Multi-category support)
@@ -600,6 +609,7 @@ Route::prefix('tours')->group(function () {
                         'tour_themes' => $themes,
                         // Legacy single category for compatibility (optional)
                         'category' => $categories->first() ?? null,
+                        'updated_at' => $tour->updated_at ? $tour->updated_at->toIso8601String() : null,
                     ];
                 }),
                 'current_page' => $tours->currentPage(),
@@ -856,6 +866,8 @@ Route::prefix('tours')->group(function () {
                     'tour_themes' => $tourThemes,
                     'suitable_for' => $tour->suitable_for,
                     'cities_covered' => $tour->cities_covered,
+                    // TR-01: [{name (translated when a destination matches), original, slug, id}]
+                    'cities' => \Modules\Tour\Support\TourDestinations::cities($tour, $lang),
                     'availability_dates' => $tour->availability_dates,
                     'conditions' => $conditions,
                     'cancellation_policy' => $cancellationPolicy,
