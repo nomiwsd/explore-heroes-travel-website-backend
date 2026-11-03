@@ -226,12 +226,16 @@ Route::prefix('destinations')->group(function () {
                     ->where('object_model', 'location_translation_' . $lang)
                     ->first();
             }
+            // DS-03: on the default language the SEO saved in the admin (bc_seo
+            // object_model "location") wins over the plain destination name.
+            $originSeoTitle = (!$lang || is_default_lang($lang)) && is_array($seo) ? ($seo['seo_title'] ?? null) : null;
+            $originSeoDesc = (!$lang || is_default_lang($lang)) && is_array($seo) ? ($seo['seo_desc'] ?? null) : null;
             $metaTitle = ($seoMeta && $seoMeta->seo_title)
                 ? $seoMeta->seo_title
-                : (($translation && $translation->name) ? $translation->name : ($destination->seo_title ?: $destination->name));
+                : ($originSeoTitle ?: (($translation && $translation->name) ? $translation->name : ($destination->seo_title ?: $destination->name)));
             $metaDescription = ($seoMeta && $seoMeta->seo_desc)
                 ? $seoMeta->seo_desc
-                : (($translation && $translation->short_description) ? $translation->short_description : ($destination->seo_desc ?: $destination->short_description));
+                : ($originSeoDesc ?: (($translation && $translation->short_description) ? $translation->short_description : ($destination->seo_desc ?: $destination->short_description)));
 
             // DS-08: tours of a destination = pivot rows ∪ tours.location_id ∪
             // tours whose cities_covered mentions this destination (published only)
