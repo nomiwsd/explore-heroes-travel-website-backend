@@ -47,6 +47,9 @@ services:
       DB_USERNAME: ${DB_USERNAME:-explore_heroes}
       DB_PASSWORD: ${DB_PASSWORD}
       APP_URL: ${SITE_URL:-http://localhost:8080}
+      # Media URLs must use the public domain even when the Next.js server
+      # calls the API through the internal host (http://web).
+      ASSET_URL: ${SITE_URL:-http://localhost:8080}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-false}
     volumes:
       - backend_storage:/var/www/html/storage
@@ -56,6 +59,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   scheduler:
     image: explore-heroes-backend:${IMAGE_TAG:-latest}
@@ -71,6 +80,9 @@ services:
       DB_USERNAME: ${DB_USERNAME:-explore_heroes}
       DB_PASSWORD: ${DB_PASSWORD}
       APP_URL: ${SITE_URL:-http://localhost:8080}
+      # Media URLs must use the public domain even when the Next.js server
+      # calls the API through the internal host (http://web).
+      ASSET_URL: ${SITE_URL:-http://localhost:8080}
     volumes:
       - backend_storage:/var/www/html/storage
       - ${UPLOADS_PATH:-backend_uploads}:/var/www/html/public/uploads
@@ -106,8 +118,10 @@ services:
       - ${UPLOADS_PATH:-backend_uploads}:/var/www/html/public/uploads:ro
       - ./certbot/www:/var/www/certbot:ro
     depends_on:
-      - app
-      - frontend
+      app:
+        condition: service_healthy
+      frontend:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/api/health >/dev/null || exit 1"]
       interval: 30s

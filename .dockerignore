@@ -17,3 +17,5 @@ public/hot
 database/backups
 *.zip
 test_user_name.php
+# Database admin UI: never ship it in the image
+public/adminer
