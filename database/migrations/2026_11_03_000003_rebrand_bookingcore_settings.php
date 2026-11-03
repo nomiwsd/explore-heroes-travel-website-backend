@@ -7,10 +7,13 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    private const NAME = '2026_11_03_000003_rebrand_bookingcore_settings';
+
     /**
      * ST-02 / ST-03: replace BookingCore template vendor values that are still
      * stored in core_settings. Only rows whose value still contains the vendor
      * demo text are touched; anything the admin customised is left alone.
+     * Previous values are kept in bc_settings_backups and restored by down().
      */
     public function up(): void
     {
@@ -44,8 +47,7 @@ return new class extends Migration
                     continue;
                 }
                 if ($isVendor($row->val)) {
-                    DB::table('core_settings')->where('id', $row->id)->update(['val' => $newVal]);
-                    Cache::forget('setting_' . $row->name);
+                    \App\Support\SettingsBackup::update(self::NAME, $row, $newVal);
                 }
             }
         }
@@ -53,6 +55,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        // Irreversible data cleanup.
+        \App\Support\SettingsBackup::restore(self::NAME);
     }
 };

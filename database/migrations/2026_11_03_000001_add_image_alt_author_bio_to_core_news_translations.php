@@ -27,16 +27,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (!Schema::hasTable('core_news_translations')) {
-            return;
-        }
-        Schema::table('core_news_translations', function (Blueprint $table) {
-            if (Schema::hasColumn('core_news_translations', 'image_alt')) {
-                $table->dropColumn('image_alt');
-            }
-            if (Schema::hasColumn('core_news_translations', 'author_bio')) {
-                $table->dropColumn('author_bio');
-            }
-        });
+        // Intentionally a no-op: dropping these columns would delete the
+        // translated alt texts and author bios entered on production.
     }
 };
