@@ -1316,26 +1316,9 @@ Route::prefix('news')->group(function () {
 
             // Transform data with images and author
             $data = collect($posts->items())->map(function ($post) use ($lang, $tagsByPost) {
-                $translation = $lang ? $post->forceTranslate($lang) : null;
-                // Get author info
-                $author = null;
-                if ($post->create_user) {
-                    $user = \App\User::find($post->create_user);
-                    if ($user) {
-                        $author = [
-                            'id' => $user->id,
-                            'display_name' => $user->name ?? $user->display_name ?? 'Unknown',
-                            'avatar_url' => null,
-                        ];
-                        if ($user->avatar_id) {
-                            $media = \Modules\Media\Models\MediaFile::find($user->avatar_id);
-                            if ($media) {
-                                $author['avatar_url'] = '/uploads/' . ltrim($media->file_path, '/');
-                                $author['avatar_url'] = str_replace('/uploads/uploads/', '/uploads/', $author['avatar_url']);
-                            }
-                        }
-                    }
-                }
+                $translation = ($lang && !is_default_lang($lang)) ? $post->forceTranslate($lang) : null;
+                // BL-01: public author (display name, never an email)
+                $author = \Modules\News\Support\NewsPresenter::author($post->create_user ?: $post->author_id, false);
 
                 // Clean image URL (return relative path for frontend robustness)
                 $imageUrl = null;
@@ -1363,10 +1346,12 @@ Route::prefix('news')->group(function () {
 
                 return [
                     'id' => $post->id,
-                    'title' => $translation->title ?? $post->title,
+                    'title' => \Modules\News\Support\NewsPresenter::tr($translation, $post, 'title'),
                     'slug' => ($translation && $translation->slug) ? $translation->slug : $post->slug,
-                    'content' => $translation->content ?? $post->content,
-                    'excerpt' => $translation->excerpt ?? $post->excerpt,
+                    'content' => \Modules\News\Support\NewsPresenter::tr($translation, $post, 'content'),
+                    'excerpt' => \Modules\News\Support\NewsPresenter::tr($translation, $post, 'excerpt'),
+                    'image_alt' => \Modules\News\Support\NewsPresenter::imageAlt($post, $translation),
+                    'featured_image_alt' => \Modules\News\Support\NewsPresenter::imageAlt($post, $translation),
                     'status' => $post->status,
                     'is_featured' => $post->is_featured,
                     'cat_id' => $post->cat_id,
@@ -1376,8 +1361,9 @@ Route::prefix('news')->group(function () {
                     'image_url' => $imageUrl,
                     'author' => $author,
                     'publish_date' => $post->publish_date ? $post->publish_date->format('Y-m-d') : ($post->created_at ? $post->created_at->format('Y-m-d') : null),
+                    'published_at' => \Modules\News\Support\NewsPresenter::publishedAt($post),
                     'created_at' => $post->created_at,
-                    'updated_at' => $post->updated_at,
+                    'updated_at' => \Modules\News\Support\NewsPresenter::iso($post->updated_at),
                 ];
             });
 
@@ -1430,26 +1416,9 @@ Route::prefix('news')->group(function () {
             }
 
             $data = $posts->map(function ($post) use ($lang, $tagsByPost) {
-                $translation = $lang ? $post->forceTranslate($lang) : null;
-                // Get author info
-                $author = null;
-                if ($post->create_user) {
-                    $user = \App\User::find($post->create_user);
-                    if ($user) {
-                        $author = [
-                            'id' => $user->id,
-                            'display_name' => $user->name ?? $user->display_name ?? 'Unknown',
-                            'avatar_url' => null,
-                        ];
-                        if ($user->avatar_id) {
-                            $media = \Modules\Media\Models\MediaFile::find($user->avatar_id);
-                            if ($media) {
-                                $author['avatar_url'] = '/uploads/' . ltrim($media->file_path, '/');
-                                $author['avatar_url'] = str_replace('/uploads/uploads/', '/uploads/', $author['avatar_url']);
-                            }
-                        }
-                    }
-                }
+                $translation = ($lang && !is_default_lang($lang)) ? $post->forceTranslate($lang) : null;
+                // BL-01: public author (display name, never an email)
+                $author = \Modules\News\Support\NewsPresenter::author($post->create_user ?: $post->author_id, false);
 
                 // Clean image URL (return relative path for frontend robustness)
                 $imageUrl = null;
@@ -1477,10 +1446,12 @@ Route::prefix('news')->group(function () {
 
                 return [
                     'id' => $post->id,
-                    'title' => $translation->title ?? $post->title,
+                    'title' => \Modules\News\Support\NewsPresenter::tr($translation, $post, 'title'),
                     'slug' => ($translation && $translation->slug) ? $translation->slug : $post->slug,
-                    'content' => $translation->content ?? $post->content,
-                    'excerpt' => $translation->excerpt ?? $post->excerpt,
+                    'content' => \Modules\News\Support\NewsPresenter::tr($translation, $post, 'content'),
+                    'excerpt' => \Modules\News\Support\NewsPresenter::tr($translation, $post, 'excerpt'),
+                    'image_alt' => \Modules\News\Support\NewsPresenter::imageAlt($post, $translation),
+                    'featured_image_alt' => \Modules\News\Support\NewsPresenter::imageAlt($post, $translation),
                     'is_featured' => $post->is_featured,
                     'cat_id' => $post->cat_id,
                     'category' => $categoryData,
@@ -1489,7 +1460,9 @@ Route::prefix('news')->group(function () {
                     'image_url' => $imageUrl,
                     'author' => $author,
                     'publish_date' => $post->publish_date ? $post->publish_date->format('Y-m-d') : ($post->created_at ? $post->created_at->format('Y-m-d') : null),
+                    'published_at' => \Modules\News\Support\NewsPresenter::publishedAt($post),
                     'created_at' => $post->created_at,
+                    'updated_at' => \Modules\News\Support\NewsPresenter::iso($post->updated_at),
                 ];
             });
 
@@ -1673,26 +1646,10 @@ Route::prefix('news')->group(function () {
                 })->all();
             }
 
-            // Get author info
-            $author = null;
-            if ($post->create_user) {
-                $user = \App\User::find($post->create_user);
-                if ($user) {
-                    $author = [
-                        'id' => $user->id,
-                        'display_name' => $user->display_name ?? $user->name ?? 'Unknown',
-                        'avatar_url' => null,
-                        'bio' => $user->bio ?? null,
-                    ];
-                    if ($user->avatar_id) {
-                        $media = \Modules\Media\Models\MediaFile::find($user->avatar_id);
-                        if ($media) {
-                            $author['avatar_url'] = '/uploads/' . ltrim($media->file_path, '/');
-                            $author['avatar_url'] = str_replace('/uploads/uploads/', '/uploads/', $author['avatar_url']);
-                        }
-                    }
-                }
-            }
+            // BL-01: public author (display name, never an email).
+            // BL-04: author bio is per-locale (core_news_translations.author_bio).
+            $authorBio = \Modules\News\Support\NewsPresenter::authorBio($post, $translation);
+            $author = \Modules\News\Support\NewsPresenter::author($post->create_user ?: $post->author_id, $authorBio);
 
             // Clean image URL helper (return relative path for frontend robustness)
             $getImageUrl = function($imageId) {
@@ -1735,17 +1692,14 @@ Route::prefix('news')->group(function () {
             // Ideally related posts should also respect lang, but it might be expensive.
             // Let's stick to main post translation first.
 
-            $related = $relatedPostsResolved->map(function ($p) use ($getImageUrl) {
-                return [
-                    'id' => $p->id,
-                    'title' => $p->title, // Could translate this too if needed
-                    'slug' => $p->slug,
-                    'excerpt' => $p->excerpt,
-                    'image_url' => $getImageUrl($p->image_id),
-                    'publish_date' => $p->publish_date ? $p->publish_date->format('Y-m-d') : ($p->created_at ? $p->created_at->format('Y-m-d') : null),
-                    'created_at' => $p->created_at,
-                ];
-            });
+            // BL-03: related posts honour ?lang= (title, slug, excerpt, category)
+            $relatedTranslations = \Modules\News\Support\NewsPresenter::translationsFor(
+                $relatedPostsResolved->pluck('id')->map(function ($v) { return (int) $v; })->all(),
+                $lang
+            );
+            $related = $relatedPostsResolved->map(function ($p) use ($lang, $relatedTranslations) {
+                return \Modules\News\Support\NewsPresenter::relatedCard($p, $lang, $relatedTranslations[(int) $p->id] ?? null);
+            })->values();
 
             // Translate location name
             $locationTr = ($lang && !is_default_lang($lang) && $post->location)
@@ -1780,7 +1734,8 @@ Route::prefix('news')->group(function () {
                     'excerpt' => ($translation && $translation->excerpt) ? $translation->excerpt : $post->excerpt,
                     'short_desc' => ($translation && $translation->short_desc) ? $translation->short_desc : $post->short_desc,
                     'image_url' => $getImageUrl($post->image_id),
-                    'image_alt' => $post->image_alt ?? null,
+                    'image_alt' => \Modules\News\Support\NewsPresenter::imageAlt($post, $translation),
+                    'featured_image_alt' => \Modules\News\Support\NewsPresenter::imageAlt($post, $translation),
                     'cat_id' => $post->cat_id,
                     'category' => $category,
                     'tags' => $tags,
@@ -1790,10 +1745,12 @@ Route::prefix('news')->group(function () {
                         'slug' => $post->location->slug,
                     ] : null,
                     'author' => $author,
-                    'author_bio' => $post->author_bio,
+                    'author_bio' => $authorBio,
                     'reading_time' => $post->reading_time ?? null,
                     'publish_date' => $post->publish_date ? $post->publish_date->format('Y-m-d') : ($post->created_at ? $post->created_at->format('Y-m-d') : null),
+                    'published_at' => \Modules\News\Support\NewsPresenter::publishedAt($post),
                     'created_at' => $post->created_at,
+                    'updated_at' => \Modules\News\Support\NewsPresenter::iso($post->updated_at),
 
                     // SEO metadata — locale-aware fallback chain
                     'meta_title' => $metaTitle,
