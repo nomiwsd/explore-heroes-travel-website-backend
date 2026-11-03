@@ -28,6 +28,25 @@ Route::prefix('admin')->group(function () {
                 $user = Auth::user();
                 $token = $user->createToken('admin-token')->plainTextToken;
 
+                // US-04: record last login (query builder: no model events / updated_at churn)
+                try {
+                    $loginUpdate = [];
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'last_login_at')) {
+                        $loginUpdate['last_login_at'] = now();
+                    }
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'last_login_ip')) {
+                        $loginUpdate['last_login_ip'] = substr((string) $request->ip(), 0, 45);
+                    }
+                    if ($loginUpdate) {
+                        \Illuminate\Support\Facades\DB::table('users')->where('id', $user->id)->update($loginUpdate);
+                        foreach ($loginUpdate as $k => $v) {
+                            $user->setAttribute($k, $v);
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::error('last_login update failed: ' . $e->getMessage());
+                }
+
                 // Audit Log Login
                 try {
                     \Modules\Core\Models\AuditLog::create([
