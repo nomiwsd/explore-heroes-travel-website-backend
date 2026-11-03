@@ -212,7 +212,7 @@ class SeoController extends Controller
         $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
         
         // Use Frontend URL from env, fallback to request root or default
-        $baseUrl = rtrim(env('FRONTEND_URL', 'http://localhost:3000'), '/');
+        $baseUrl = rtrim((string) config('app.frontend_url', 'http://localhost:3000'), '/');
 
         // 1. Static & Home
         $xml .= '<url><loc>' . $baseUrl . '</loc><changefreq>daily</changefreq><priority>1.0</priority></url>';

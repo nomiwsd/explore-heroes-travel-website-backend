@@ -267,7 +267,7 @@ class TranslationsController extends AdminController
 
         // 2. Scan Frontend (TSX/TS) - Configurable Path
         // In local dev: sibling directory. In prod: might need to be set via env or skipped if not accessible
-        $frontendPathEnv = env('FRONTEND_PATH', '../explore-heros-travel-website');
+        $frontendPathEnv = config('app.frontend_path', '../explore-heros-travel-website');
 
         // Handle both ABSOLUTE and RELATIVE paths.
         // If env value starts with `/` (Linux abs) or `X:` (Windows abs), use as-is. Else resolve via base_path.
@@ -694,7 +694,7 @@ class TranslationsController extends AdminController
             // 4. Write to frontend messages folder (for next-intl, optional)
             // -----------------------------------------------------------------
             try {
-                $frontendPathEnv = env('FRONTEND_PATH', '../explore-heros-travel-website');
+                $frontendPathEnv = config('app.frontend_path', '../explore-heros-travel-website');
                 $frontendMessagesDir = base_path($frontendPathEnv . '/messages');
 
                 if (is_dir($frontendMessagesDir) && is_writable($frontendMessagesDir)) {
@@ -708,7 +708,7 @@ class TranslationsController extends AdminController
             // 5. Write to FRONTEND public/locales/ (used by t() at runtime)
             // -----------------------------------------------------------------
             try {
-                $frontendPathEnv = env('FRONTEND_PATH', '../explore-heros-travel-website');
+                $frontendPathEnv = config('app.frontend_path', '../explore-heros-travel-website');
                 $frontendPublicLocalesDir = base_path($frontendPathEnv . '/public/locales');
 
                 if (!is_dir($frontendPublicLocalesDir)) {

@@ -60,6 +60,15 @@ return [
     'asset_url' => env('ASSET_URL'),
 
     /*
+    | Values read at runtime outside config files must live here: once
+    | `php artisan config:cache` runs, env() returns null everywhere else.
+    */
+    'https' => (bool) env('APP_HTTPS', false),
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
+    'frontend_path' => env('FRONTEND_PATH', '../explore-heros-travel-website'),
+    'demo_mode' => (bool) env('DEMO_MODE', false),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
