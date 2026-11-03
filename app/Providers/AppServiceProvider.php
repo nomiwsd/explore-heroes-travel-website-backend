@@ -99,9 +99,11 @@ class AppServiceProvider extends ServiceProvider
         $nonDelivering = ['log', 'array', ''];
         $useDbMail = !config('mail.force_env');
         if ($useDbMail && in_array($dbDriver, $nonDelivering, true) && !in_array($envMailer, $nonDelivering, true)) {
-            // Only treat .env as "configured" for smtp when it has real credentials
+            // Treat .env smtp as configured when a real host is set (a username
+            // is optional: internal relays often accept unauthenticated mail).
+            $smtpHost = (string) config('mail.mailers.smtp.host');
             $envSmtpReady = $envMailer !== 'smtp'
-                || (config('mail.mailers.smtp.username') && config('mail.mailers.smtp.host') && config('mail.mailers.smtp.host') !== 'smtp.mailgun.org');
+                || ($smtpHost !== '' && $smtpHost !== 'smtp.mailgun.org');
             if ($envSmtpReady) {
                 $useDbMail = false;
             }
