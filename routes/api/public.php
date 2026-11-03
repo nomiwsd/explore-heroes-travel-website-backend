@@ -2051,6 +2051,63 @@ Route::prefix('admin/page-settings')->middleware('auth:sanctum')->group(function
 
 
 // =====================================================
+// SEO REDIRECTS (Public, read-only) — RD-01
+// GET /api/seo/redirects -> [{ "from": "/old", "to": "/new-or-absolute", "status": 301 }]
+// Only active rules. Cached 5 min; admin store/bulkEdit clears the cache key.
+// (Admin CRUD lives at /api/module/core/seo/redirects, auth-only.)
+// =====================================================
+Route::prefix('seo')->group(function () {
+    Route::get('/redirects', function () {
+        try {
+            $rules = \Illuminate\Support\Facades\Cache::remember('seo_public_redirects', 300, function () {
+                if (!Schema::hasTable('bc_redirects')) {
+                    return [];
+                }
+                $q = DB::table('bc_redirects');
+                if (Schema::hasColumn('bc_redirects', 'is_active')) {
+                    $q->where('is_active', 1);
+                }
+                $hasStatus = Schema::hasColumn('bc_redirects', 'status_code');
+                $out = [];
+                $seen = [];
+                foreach ($q->orderBy('id', 'desc')->get() as $row) {
+                    $from = trim((string) ($row->old_url ?? ''));
+                    $to = trim((string) ($row->new_url ?? ''));
+                    if ($from === '' || $to === '') {
+                        continue;
+                    }
+                    // Normalise "from" to a path (+ query) starting with "/"
+                    if (preg_match('#^https?://#i', $from)) {
+                        $parts = parse_url($from);
+                        $from = ($parts['path'] ?? '/') . (isset($parts['query']) ? '?' . $parts['query'] : '');
+                    }
+                    if ($from[0] !== '/') {
+                        $from = '/' . $from;
+                    }
+                    // "to" may be absolute; relative targets get a leading "/"
+                    if (!preg_match('#^https?://#i', $to) && $to[0] !== '/') {
+                        $to = '/' . $to;
+                    }
+                    if ($from === $to || isset($seen[$from])) {
+                        continue;
+                    }
+                    $seen[$from] = true;
+                    $status = $hasStatus ? (int) $row->status_code : 301;
+                    if (!in_array($status, [301, 302, 307, 308], true)) {
+                        $status = 301;
+                    }
+                    $out[] = ['from' => $from, 'to' => $to, 'status' => $status];
+                }
+                return $out;
+            });
+            return response()->json($rules)->header('Cache-Control', 'public, max-age=300');
+        } catch (\Exception $e) {
+            return response()->json([]);
+        }
+    });
+});
+
+// =====================================================
 // SEO API (Public Access)
 // =====================================================
 Route::prefix('module/core/seo')->group(function () {
