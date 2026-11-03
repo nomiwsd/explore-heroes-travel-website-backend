@@ -83,6 +83,19 @@ Nothing here touches the current PM2/nginx setup until you choose to switch.
    and `docker compose exec web nginx -s reload`.
 5. Verify email: `docker compose exec -u www-data app php artisan mail:test you@example.com`.
 
+## Testing
+
+`deploy/smoke-test.mjs` checks the bug-sheet fixes against any running site
+(read-only GET requests; Node 18+):
+
+```bash
+node deploy/smoke-test.mjs                         # http://localhost:8080
+node deploy/smoke-test.mjs https://exploreheroes.com
+```
+
+Each check prints PASS / FAIL / SKIP with its sheet ID; SKIP means the data
+it needs isn't there yet (e.g. no redirect rules). Exit code 1 on any FAIL.
+
 ## Updating
 
 ```bash
