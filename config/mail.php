@@ -100,9 +100,17 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
-        'name'    => env('MAIL_FROM_NAME', 'Example'),
+        'address' => env('MAIL_FROM_ADDRESS', 'info@exploreheroes.com'),
+        'name'    => env('MAIL_FROM_NAME', 'Explore Heroes'),
     ],
+
+    /*
+     * ST-01: when true, the mailer/SMTP settings from .env always win over the
+     * admin "Email" settings (email_driver, email_host ...). When false (default)
+     * admin settings apply, except that an admin driver of "log"/"array" never
+     * downgrades a real mailer configured in .env.
+     */
+    'force_env' => env('MAIL_FORCE_ENV', false),
 
     /*
     |--------------------------------------------------------------------------
