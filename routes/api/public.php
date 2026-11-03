@@ -988,23 +988,10 @@ Route::prefix('translations')->group(function () {
         }
     });
 
-    // Get translations for a specific locale
+    // Get translations for a specific locale.
+    // Order: storage/app/translations (admin Build) -> lang/ -> resources/lang/ -> public/locales/ -> {}
     Route::get('/{locale}', function ($locale) {
-        // First try to get from public file
-        $publicFile = base_path('public/locales/' . $locale . '.json');
-        if (file_exists($publicFile)) {
-            $content = file_get_contents($publicFile);
-            return response($content)->header('Content-Type', 'application/json');
-        }
-
-        // Fallback to resources/lang file
-        $file = base_path('resources/lang/' . $locale . '.json');
-        if (file_exists($file)) {
-            $content = file_get_contents($file);
-            return response($content)->header('Content-Type', 'application/json');
-        }
-
-        return response()->json([]);
+        return \Modules\Language\Support\PublicTranslations::response($locale);
     });
 });
 
