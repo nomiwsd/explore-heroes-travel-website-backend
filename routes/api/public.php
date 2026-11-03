@@ -2058,17 +2058,23 @@ Route::prefix('seo')->group(function () {
     Route::get('/redirects', function () {
         try {
             $rules = \Illuminate\Support\Facades\Cache::remember('seo_public_redirects', 300, function () {
-                if (!Schema::hasTable('bc_redirects')) {
-                    return [];
+                // The Next.js admin (routes/api/admin/core.php) stores rules in
+                // bc_redirects; the legacy Blade admin used core_redirects. Read
+                // both, bc_redirects first so it wins on duplicates.
+                $rows = collect();
+                foreach (['bc_redirects', 'core_redirects'] as $table) {
+                    if (!Schema::hasTable($table)) {
+                        continue;
+                    }
+                    $q = DB::table($table);
+                    if (Schema::hasColumn($table, 'is_active')) {
+                        $q->where('is_active', 1);
+                    }
+                    $rows = $rows->concat($q->orderBy('id', 'desc')->get());
                 }
-                $q = DB::table('bc_redirects');
-                if (Schema::hasColumn('bc_redirects', 'is_active')) {
-                    $q->where('is_active', 1);
-                }
-                $hasStatus = Schema::hasColumn('bc_redirects', 'status_code');
                 $out = [];
                 $seen = [];
-                foreach ($q->orderBy('id', 'desc')->get() as $row) {
+                foreach ($rows as $row) {
                     $from = trim((string) ($row->old_url ?? ''));
                     $to = trim((string) ($row->new_url ?? ''));
                     if ($from === '' || $to === '') {
@@ -2082,7 +2088,11 @@ Route::prefix('seo')->group(function () {
                     if ($from[0] !== '/') {
                         $from = '/' . $from;
                     }
-                    // "to" may be absolute; relative targets get a leading "/"
+                    // "to" may be absolute; relative targets get a leading "/".
+                    // Protocol-relative "//host" would leave the site: skip it.
+                    if (strpos($to, '//') === 0 || strpos($from, '//') === 0) {
+                        continue;
+                    }
                     if (!preg_match('#^https?://#i', $to) && $to[0] !== '/') {
                         $to = '/' . $to;
                     }
@@ -2090,7 +2100,7 @@ Route::prefix('seo')->group(function () {
                         continue;
                     }
                     $seen[$from] = true;
-                    $status = $hasStatus ? (int) $row->status_code : 301;
+                    $status = isset($row->status_code) ? (int) $row->status_code : 301;
                     if (!in_array($status, [301, 302, 307, 308], true)) {
                         $status = 301;
                     }
