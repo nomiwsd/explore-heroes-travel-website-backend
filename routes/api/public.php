@@ -901,7 +901,6 @@ Route::prefix('tours')->group(function () {
                     'tour_expert' => $tour->tourExpert ? [
                         'id' => (int) $tour->tourExpert->id,
                         'name' => $tour->tourExpert->getDisplayName() ?? $tour->tourExpert->name ?? $tour->tourExpert->first_name,
-                        'email' => $tour->tourExpert->email ?? '',
                         'avatar' => $tour->tourExpert->avatar_id ? get_file_url($tour->tourExpert->avatar_id, 'thumb') : null,
                     ] : null,
                     // author removed
@@ -976,7 +975,7 @@ Route::prefix('tours')->group(function () {
 Route::prefix('settings')->group(function () {
     Route::get('/{group?}', function (Request $request, $group = 'general') {
         $lang = $request->query('lang');
-        $settings = Settings::getSettings($group, $lang);
+        $settings = Settings::getPublicSettings($group, $lang);
         return response()->json($settings);
     });
 });
@@ -1125,7 +1124,6 @@ Route::prefix('reviews')->group(function () {
                     // Prioritize Columns over Meta
                     'author_id' => $review->author_id,
                     'author_name' => $review->author_name ?? $meta['author_name'] ?? ($review->author ? $review->author->name : 'Anonymous'),
-                    'author_email' => $review->author_email ?? $meta['author_email'] ?? ($review->author ? $review->author->email : null),
                     'author_avatar' => $review->author_avatar ?? $meta['author_avatar'] ?? ($review->author ? get_file_url($review->author->avatar_id, 'full') : null),
                     'author_location' => $review->author_location ?? $meta['author_location'] ?? null,
                     'author_country' => $review->author_country ?? $meta['author_country'] ?? null,
@@ -2115,7 +2113,7 @@ Route::prefix('module/core/seo')->group(function () {
     Route::get('/global', function (Request $request) {
         try {
             $lang = $request->query('lang');
-            $settings = Settings::getSettings('seo', $lang);
+            $settings = Settings::getPublicSettings('seo', $lang);
             return response()->json($settings);
         } catch (\Exception $e) {
             return response()->json([]);
@@ -2125,7 +2123,7 @@ Route::prefix('module/core/seo')->group(function () {
     // Sitemap Settings
     Route::get('/sitemap', function () {
         try {
-            $settings = Settings::getSettings('sitemap');
+            $settings = Settings::getPublicSettings('sitemap');
             return response()->json($settings);
         } catch (\Exception $e) {
             return response()->json([]);
